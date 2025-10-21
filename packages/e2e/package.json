@@ -1,0 +1,15 @@
+{
+  "name": "@stremio-ai-subs/e2e",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.8.3",
+    "@playwright/test": "^1.40.1",
+    "playwright": "^1.40.1"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@stremio-ai-subs/workers",
+  "version": "1.0.0",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@stremio-ai-subs/shared": "workspace:*",
+    "@aws-sdk/client-s3": "^3.478.0",
+    "axios": "^1.6.5",
+    "bullmq": "^5.1.5",
+    "ioredis": "^5.3.2",
+    "openai": "^4.24.1",
+    "pg": "^8.11.3",
+    "pino": "^8.17.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}
