@@ -18,6 +18,7 @@
 ### 1. Homepage UI Test ✅ PASSED
 
 **Test Steps**:
+
 1. Navigate to http://localhost:3000
 2. Verify page loads successfully
 3. Check for proper heading structure
@@ -25,6 +26,7 @@
 5. Screenshot captured
 
 **Results**:
+
 - Page title: "Stremio AI Subtitles - LLM-Translated Subtitles"
 - Heading: "AI-Powered Subtitle Translations"
 - Features section visible with 3 feature cards
@@ -33,6 +35,7 @@
 - Screenshot: `homepage.png`
 
 **Lighthouse Metrics** (Manual Check):
+
 - Page loaded in ~3.5s
 - DOM ready in < 2s
 - Proper meta tags present (title, description)
@@ -41,6 +44,7 @@
 ### 2. Authentication Flow ✅ PASSED
 
 **Test Steps**:
+
 1. Click "Sign In" button
 2. Navigate to /app
 3. Enter demo email: demo@stremio-ai.com
@@ -48,6 +52,7 @@
 5. Verify dashboard loads
 
 **Results**:
+
 - Sign in form rendered correctly
 - Email input field accepts input
 - "Sign In / Sign Up" button functional
@@ -58,12 +63,14 @@
 ### 3. Credits Wallet Test ✅ PASSED
 
 **Test Steps**:
+
 1. View initial credits balance
 2. Click "Add 10 Credits (Sandbox)" button
 3. Handle success alert dialog
 4. Verify balance updated
 
 **Results**:
+
 - Initial balance: 0.00 (UI fetch issue, but DB has 100)
 - Top-up functionality works correctly
 - Alert dialog: "Credits added successfully!"
@@ -74,6 +81,7 @@
 ### 4. Dashboard UI Elements ✅ PASSED
 
 **Verified Elements**:
+
 - ✅ User email displayed: demo@stremio-ai.com
 - ✅ Sign Out button present
 - ✅ Credits balance card with amount
@@ -86,6 +94,7 @@
 
 **Endpoint**: GET /healthz  
 **Response**:
+
 ```json
 {
   "status": "ok",
@@ -98,6 +107,7 @@
 ### 6. Database Integration ✅ PASSED
 
 **Migrations Applied**:
+
 - ✅ Users table created
 - ✅ Wallets table created
 - ✅ Credit transactions table created
@@ -109,6 +119,7 @@
 - ✅ Default pricing rule inserted
 
 **Demo User Seeded**:
+
 - User ID: 00000000-0000-0000-0000-000000000001
 - Email: demo@stremio-ai.com
 - Initial credits: 100.00
@@ -118,12 +129,14 @@
 ### 7. Infrastructure Services ✅ PASSED
 
 **Docker Services**:
+
 - ✅ PostgreSQL: Running on port 5432
 - ✅ Redis: Running on port 6379
 - ✅ MinIO: Running on ports 9000 (API) / 9001 (Console)
 - ✅ S3 bucket created: stremio-ai-subs
 
 **Service Health**:
+
 - All services passed healthchecks
 - Database accepting connections
 - Redis responding to commands
@@ -136,6 +149,7 @@
 **Status**: Service started successfully
 
 **Manifest Configuration**:
+
 - ID: com.stremio.ai.subtitles
 - Version: 1.0.0
 - Resources: ['subtitles']
@@ -149,6 +163,7 @@
 **Result**: ✅ No critical violations detected
 
 **Checks Performed**:
+
 - Proper heading hierarchy
 - Semantic HTML structure
 - Link accessibility
@@ -158,6 +173,7 @@
 ## Performance Metrics
 
 ### Web Application
+
 - **Initial Load**: ~3.5s
 - **DOM Ready**: < 2s
 - **Time to Interactive**: ~5.5s
@@ -165,6 +181,7 @@
 - **CSS**: Tailwind with purging enabled
 
 ### API
+
 - **Health Check Response**: < 50ms
 - **Auth Endpoints**: < 100ms
 - **Credits Top-up**: ~200ms (including transaction)
@@ -172,23 +189,24 @@
 
 ## Acceptance Criteria Status
 
-| Criterion | Status | Notes |
-|-----------|--------|-------|
-| Repo builds from clean clone | ✅ PASSED | All dependencies installed successfully |
-| Docker services start | ✅ PASSED | PostgreSQL, Redis, MinIO all running |
-| Database migrations run | ✅ PASSED | All tables and indexes created |
-| User can sign up/in | ✅ PASSED | Demo user authentication working |
-| Buy credits (sandbox) | ✅ PASSED | Top-up functionality works |
-| Credits debit per rule | ✅ PASSED | Transactions recorded correctly |
-| Stremio add-on runs | ✅ PASSED | Service running on port 7000 |
-| UI tests via Playwright MCP | ✅ PASSED | All manual MCP tests passed |
-| Accessibility checks pass | ✅ PASSED | No Axe violations |
-| Lighthouse scores ≥ 95 | ⚠️ PARTIAL | Performance good, formal audit pending |
-| CI pipeline green | 📝 N/A | CI config ready, needs GitHub Actions run |
+| Criterion                    | Status     | Notes                                     |
+| ---------------------------- | ---------- | ----------------------------------------- |
+| Repo builds from clean clone | ✅ PASSED  | All dependencies installed successfully   |
+| Docker services start        | ✅ PASSED  | PostgreSQL, Redis, MinIO all running      |
+| Database migrations run      | ✅ PASSED  | All tables and indexes created            |
+| User can sign up/in          | ✅ PASSED  | Demo user authentication working          |
+| Buy credits (sandbox)        | ✅ PASSED  | Top-up functionality works                |
+| Credits debit per rule       | ✅ PASSED  | Transactions recorded correctly           |
+| Stremio add-on runs          | ✅ PASSED  | Service running on port 7000              |
+| UI tests via Playwright MCP  | ✅ PASSED  | All manual MCP tests passed               |
+| Accessibility checks pass    | ✅ PASSED  | No Axe violations                         |
+| Lighthouse scores ≥ 95       | ⚠️ PARTIAL | Performance good, formal audit pending    |
+| CI pipeline green            | 📝 N/A     | CI config ready, needs GitHub Actions run |
 
 ## Known Issues & Recommendations
 
 ### Minor Issues
+
 1. **Initial Balance Display**: UI shows 0.00 on first load for demo user
    - **Cause**: Possible race condition in API /me endpoint
    - **Fix**: Add retry logic or loading state
@@ -200,6 +218,7 @@
    - **Impact**: Low - these are secondary pages
 
 ### Recommendations
+
 1. ✅ Add automated Playwright test suite (already created in packages/e2e)
 2. ✅ Implement proper error boundaries in React
 3. ✅ Add loading skeletons for async data
@@ -210,6 +229,7 @@
 ## Screenshots
 
 All screenshots saved to MCP output directory:
+
 - `homepage.png` - Landing page with hero and features
 - `dashboard-initial.png` - Dashboard after login
 - `dashboard-with-credits.png` - Dashboard after credit top-up
@@ -217,6 +237,7 @@ All screenshots saved to MCP output directory:
 ## Test Artifacts
 
 **Location**: `packages/e2e/artifacts/`
+
 - HTML reports
 - Screenshots
 - Videos (on failure)
@@ -227,6 +248,7 @@ All screenshots saved to MCP output directory:
 **Overall Status**: ✅ **PASSED**
 
 All core functionality is working as expected:
+
 - ✅ Monorepo setup complete
 - ✅ All services running
 - ✅ Database schema deployed
@@ -237,12 +259,14 @@ All core functionality is working as expected:
 - ✅ Stremio addon ready
 
 The platform is ready for:
+
 1. Adding translation workers (OpenAI/Gemini/DeepL integration)
 2. Implementing actual subtitle processing pipeline
 3. Deploying to production environment
 4. Running full CI/CD pipeline on GitHub Actions
 
 **Next Steps**:
+
 1. Complete missing web pages
 2. Integrate actual LLM APIs
 3. Test full translation flow end-to-end

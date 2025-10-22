@@ -7,10 +7,9 @@ export async function authRoutes(fastify: FastifyInstance) {
     try {
       const body = CreateUserSchema.parse(request.body);
 
-      const existingUser = await fastify.db.query(
-        'SELECT id FROM users WHERE email = $1',
-        [body.email]
-      );
+      const existingUser = await fastify.db.query('SELECT id FROM users WHERE email = $1', [
+        body.email,
+      ]);
 
       if (existingUser.rows.length > 0) {
         return reply.status(400).send({ error: 'User already exists' });
@@ -42,10 +41,9 @@ export async function authRoutes(fastify: FastifyInstance) {
     try {
       const { email } = request.body as { email: string };
 
-      const result = await fastify.db.query(
-        'SELECT id, email, name FROM users WHERE email = $1',
-        [email]
-      );
+      const result = await fastify.db.query('SELECT id, email, name FROM users WHERE email = $1', [
+        email,
+      ]);
 
       if (result.rows.length === 0) {
         return reply.status(404).send({ error: 'User not found' });

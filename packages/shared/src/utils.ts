@@ -23,14 +23,14 @@ export function estimateCost(text: string, model: string): number {
   const pricePerToken = {
     'gpt-4': 0.00003,
     'gemini-pro': 0.000001,
-    'deepl': 0.00002,
+    deepl: 0.00002,
   };
   return tokens * (pricePerToken[model as keyof typeof pricePerToken] || 0);
 }
 
 export function validateWebVTT(content: string): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
-  
+
   if (!content.startsWith('WEBVTT')) {
     errors.push('Missing WEBVTT header');
   }
@@ -41,7 +41,7 @@ export function validateWebVTT(content: string): { valid: boolean; errors: strin
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    
+
     if (line.includes('-->')) {
       inCue = true;
       cueText = '';
@@ -54,14 +54,14 @@ export function validateWebVTT(content: string): { valid: boolean; errors: strin
       if (cps > 21) {
         errors.push(`Cue at line ${i} exceeds 21 CPS`);
       }
-      
+
       const cueLines = cueText.split('\n');
       for (const cueLine of cueLines) {
         if (cueLine.length > 42) {
           errors.push(`Cue line at ${i} exceeds 42 chars`);
         }
       }
-      
+
       inCue = false;
     } else if (inCue) {
       cueText += line + '\n';

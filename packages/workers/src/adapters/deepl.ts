@@ -10,7 +10,7 @@ export class DeepLAdapter {
   async translate(content: string, sourceLang: string, targetLang: string): Promise<string> {
     // Simplified - would use DeepL API
     console.log(`DeepL translate: ${sourceLang} -> ${targetLang}`);
-    
+
     // In production, call DeepL API
     return content;
   }

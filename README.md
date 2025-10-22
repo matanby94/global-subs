@@ -23,11 +23,13 @@
 ## 📦 Tech Stack
 
 ### Frontend
+
 - **Next.js 14** - App Router, React Server Components
 - **Tailwind CSS** - Utility-first styling
 - **TypeScript** - Type-safe development
 
 ### Backend
+
 - **Fastify** - High-performance REST API
 - **BullMQ** - Background job processing
 - **PostgreSQL** - Primary database
@@ -35,6 +37,7 @@
 - **S3/MinIO** - Object storage for artifacts
 
 ### Infrastructure
+
 - **Docker Compose** - Local development
 - **pnpm** - Fast package management
 - **Turbo** - Monorepo build system
@@ -166,12 +169,14 @@ pnpm --filter @stremio-ai-subs/workers dev
 ## 🌐 Deployment
 
 ### Development
+
 ```bash
 docker-compose up -d
 pnpm run dev
 ```
 
 ### Production (Single Node)
+
 ```bash
 # Set environment variables
 cp .env.example .env
@@ -185,6 +190,7 @@ docker-compose -f docker-compose.prod.yml up -d
 ```
 
 ### Kubernetes
+
 ```bash
 # Helm charts available in infra/k8s/
 helm install stremio-ai-subs ./infra/k8s

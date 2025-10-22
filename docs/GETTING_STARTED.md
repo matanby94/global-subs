@@ -36,6 +36,7 @@ pnpm run dev
 ```
 
 Services will be available at:
+
 - **Web**: http://localhost:3000
 - **API**: http://localhost:3001
 - **Stremio Addon**: http://localhost:7000
@@ -100,6 +101,7 @@ pnpm run format
 ## 📖 Documentation
 
 See [docs/](./docs) for:
+
 - [Architecture Overview](./docs/ARCHITECTURE.md)
 - Getting Started Guide (this file)
 - API Documentation

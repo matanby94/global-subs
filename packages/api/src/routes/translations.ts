@@ -38,20 +38,17 @@ export async function translationsRoutes(fastify: FastifyInstance) {
         signedUrl = `/api/sign/artifact/${artifactHash}`;
       } else {
         // Cache miss - enqueue translation job
-        await fastify.db.query(
-          'INSERT INTO jobs (kind, status, payload) VALUES ($1, $2, $3)',
-          [
-            'translate',
-            'pending',
-            JSON.stringify({
-              sourceSubtitle: body.sourceSubtitle,
-              sourceLang: body.sourceLang,
-              targetLang: body.targetLang,
-              model: body.model,
-              artifactHash,
-            }),
-          ]
-        );
+        await fastify.db.query('INSERT INTO jobs (kind, status, payload) VALUES ($1, $2, $3)', [
+          'translate',
+          'pending',
+          JSON.stringify({
+            sourceSubtitle: body.sourceSubtitle,
+            sourceLang: body.sourceLang,
+            targetLang: body.targetLang,
+            model: body.model,
+            artifactHash,
+          }),
+        ]);
 
         signedUrl = `/api/translations/status/${artifactHash}`;
       }
@@ -90,10 +87,10 @@ export async function translationsRoutes(fastify: FastifyInstance) {
         }
 
         // Debit credits
-        await client.query('UPDATE wallets SET balance_credits = balance_credits - $1 WHERE id = $2', [
-          creditsToCharge,
-          wallet.id,
-        ]);
+        await client.query(
+          'UPDATE wallets SET balance_credits = balance_credits - $1 WHERE id = $2',
+          [creditsToCharge, wallet.id]
+        );
 
         // Record transaction
         await client.query(
@@ -140,7 +137,9 @@ export async function translationsRoutes(fastify: FastifyInstance) {
     const { hash } = request.params as { hash: string };
 
     // Check artifact
-    const artifactResult = await fastify.db.query('SELECT * FROM artifacts WHERE hash = $1', [hash]);
+    const artifactResult = await fastify.db.query('SELECT * FROM artifacts WHERE hash = $1', [
+      hash,
+    ]);
 
     if (artifactResult.rows.length > 0) {
       return reply.send({

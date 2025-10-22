@@ -118,14 +118,14 @@ export default function HomePage() {
         <div className="container mx-auto px-4 text-center">
           <p>&copy; 2025 Stremio AI Subtitles. All rights reserved.</p>
           <div className="mt-4 space-x-4">
-            <Link href="/privacy" className="hover:underline">
-              Privacy
+            <Link href="/privacy" className="hover:underline" aria-label="Privacy Policy">
+              Privacy Policy
             </Link>
-            <Link href="/terms" className="hover:underline">
-              Terms
+            <Link href="/terms" className="hover:underline" aria-label="Terms of Service">
+              Terms of Service
             </Link>
-            <Link href="/contact" className="hover:underline">
-              Contact
+            <Link href="/contact" className="hover:underline" aria-label="Contact Support">
+              Contact Us
             </Link>
           </div>
         </div>

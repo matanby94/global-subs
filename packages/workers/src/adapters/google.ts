@@ -11,7 +11,7 @@ export class GoogleAdapter {
     // Simplified - would use Gemini API
     // For now, mock translation
     console.log(`Google translate: ${sourceLang} -> ${targetLang}`);
-    
+
     // In production, call Google Translate or Gemini API
     return content.replace(/(\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3})/g, '$1');
   }

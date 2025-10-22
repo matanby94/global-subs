@@ -45,10 +45,10 @@ export async function creditsRoutes(fastify: FastifyInstance) {
         const wallet = walletResult.rows[0];
 
         // Update balance
-        await client.query('UPDATE wallets SET balance_credits = balance_credits + $1 WHERE id = $2', [
-          body.amount,
-          wallet.id,
-        ]);
+        await client.query(
+          'UPDATE wallets SET balance_credits = balance_credits + $1 WHERE id = $2',
+          [body.amount, wallet.id]
+        );
 
         // Record transaction
         await client.query(

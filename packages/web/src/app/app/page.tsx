@@ -6,8 +6,15 @@ import Link from 'next/link';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+interface User {
+  id: string;
+  email: string;
+  name?: string;
+  balance_credits: number;
+}
+
 export default function AppPage() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -24,7 +31,7 @@ export default function AppPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       setUser(response.data);
-    } catch (err) {
+    } catch {
       localStorage.removeItem('token');
     }
   }
@@ -35,7 +42,8 @@ export default function AppPage() {
       const response = await axios.post(`${API_URL}/api/auth/signin`, { email });
       localStorage.setItem('token', response.data.token);
       setUser(response.data.user);
-    } catch (err: any) {
+    } catch (error) {
+      const err = error as { response?: { status: number } };
       if (err.response?.status === 404) {
         // Try signup
         const response = await axios.post(`${API_URL}/api/auth/signup`, { email });
@@ -65,7 +73,7 @@ export default function AppPage() {
       // Reload user
       loadUser(token);
       alert('Credits added successfully!');
-    } catch (err) {
+    } catch {
       alert('Failed to add credits');
     }
   }
@@ -126,7 +134,7 @@ export default function AppPage() {
           <div className="flex justify-between items-center">
             <div>
               <p className="text-4xl font-bold text-primary">
-                {parseFloat(user.balance_credits || 0).toFixed(2)}
+                {(user.balance_credits || 0).toFixed(2)}
               </p>
               <p className="text-gray-600">Available Credits</p>
             </div>
