@@ -4,10 +4,10 @@ import { db } from './db';
 const PORT = parseInt(process.env.ADDON_PORT || '7000', 10);
 
 const manifest = {
-  id: 'com.stremio.ai.subtitles',
+  id: 'com.globalsubs.addon',
   version: '1.0.0',
-  name: 'Stremio AI Subtitles',
-  description: 'AI-powered translated subtitles for Stremio',
+  name: 'GlobalSubs',
+  description: 'AI-powered subtitle translations in 100+ languages',
   resources: ['subtitles'],
   types: ['movie', 'series'],
   catalogs: [],
@@ -48,4 +48,4 @@ builder.defineSubtitlesHandler(async ({ type, id, extra }) => {
 
 serveHTTP(builder.getInterface(), { port: PORT });
 
-console.log(`🎬 Stremio addon running on http://localhost:${PORT}/manifest.json`);
+console.log(`🎬 GlobalSubs addon running on http://localhost:${PORT}/manifest.json`);

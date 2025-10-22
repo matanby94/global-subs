@@ -6,7 +6,7 @@ export default function HomePage() {
       {/* Header */}
       <header className="bg-primary text-white py-4">
         <nav className="container mx-auto px-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Stremio AI Subtitles</h1>
+          <h1 className="text-2xl font-bold">GlobalSubs</h1>
           <div className="space-x-4">
             <Link href="/pricing" className="hover:underline">
               Pricing
@@ -116,7 +116,7 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-12">
         <div className="container mx-auto px-4 text-center">
-          <p>&copy; 2025 Stremio AI Subtitles. All rights reserved.</p>
+          <p>&copy; 2025 GlobalSubs. All rights reserved.</p>
           <div className="mt-4 space-x-4">
             <Link href="/privacy" className="hover:underline" aria-label="Privacy Policy">
               Privacy Policy

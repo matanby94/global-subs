@@ -1,6 +1,6 @@
-# Stremio AI Subtitles 🎬🤖
+# GlobalSubs ��🎬
 
-> **Production-ready SaaS platform for LLM-powered subtitle translations with Stremio integration**
+> **Production-ready SaaS platform for AI-powered subtitle translations in 100+ languages**
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org/)
@@ -87,7 +87,7 @@ Once started, access:
 ### Demo Credentials
 
 ```
-Email: demo@stremio-ai.com
+Email: demo@globalsubs.net
 Credits: 100 (pre-loaded)
 ```
 
@@ -274,12 +274,12 @@ MIT © [Your Name]
 
 ## 📧 Contact
 
-- Website: https://stremio-ai-subs.com
-- Email: support@stremio-ai-subs.com
-- Twitter: [@stremioaisubs](https://twitter.com/stremioaisubs)
+- Website: https://globalsubs.net
+- Email: support@globalsubs.net
+- Twitter: [@globalsubs](https://twitter.com/globalsubs)
 
 ---
 
-**Made with ❤️ by the Stremio AI Subtitles Team**
+**Made with ❤️ by the GlobalSubs Team**
 
 **Tested with Playwright MCP Server** 🎭✅

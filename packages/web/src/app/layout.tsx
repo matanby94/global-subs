@@ -6,14 +6,15 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 export const metadata: Metadata = {
-  title: 'Stremio AI Subtitles - LLM-Translated Subtitles',
-  description: 'Get professionally translated subtitles for your favorite movies and series using AI',
-  keywords: ['stremio', 'subtitles', 'translation', 'ai', 'llm'],
-  authors: [{ name: 'Stremio AI Subtitles' }],
+  title: 'GlobalSubs - AI-Powered Subtitle Translations',
+  description: 'Professional AI-powered subtitle translations for movies and series in 100+ languages. Fast, accurate, and affordable.',
+  keywords: ['subtitles', 'translation', 'ai', 'multilingual', 'stremio', 'globalsubs'],
+  authors: [{ name: 'GlobalSubs' }],
   openGraph: {
-    title: 'Stremio AI Subtitles',
-    description: 'AI-powered subtitle translations for Stremio',
+    title: 'GlobalSubs - AI-Powered Subtitle Translations',
+    description: 'Professional subtitle translations in 100+ languages',
     type: 'website',
+    url: 'https://globalsubs.net',
   },
   robots: {
     index: true,
@@ -27,9 +28,9 @@ export const metadata: Metadata = {
 const structuredData = {
   '@context': 'https://schema.org',
   '@type': 'WebApplication',
-  name: 'Stremio AI Subtitles',
-  description: 'AI-powered subtitle translation service for Stremio',
-  url: 'http://localhost:3000',
+  name: 'GlobalSubs',
+  description: 'Professional AI-powered subtitle translation service supporting 100+ languages',
+  url: 'https://globalsubs.net',
   applicationCategory: 'MultimediaApplication',
   offers: {
     '@type': 'Offer',
