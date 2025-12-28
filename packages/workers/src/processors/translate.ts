@@ -8,7 +8,8 @@ import { GoogleAdapter } from '../adapters/google';
 import { DeepLAdapter } from '../adapters/deepl';
 
 export async function translateSubtitleProcessor(job: Job) {
-  const { sourceSubtitle, sourceLang, targetLang, model, artifactHash } = job.data;
+  const { sourceSubtitle, sourceLang, targetLang, model, artifactHash, srcRegistry, srcId } =
+    job.data;
 
   job.log(`Translating subtitle: ${sourceLang} -> ${targetLang} (${model})`);
 
@@ -62,8 +63,8 @@ export async function translateSubtitleProcessor(job: Job) {
      ON CONFLICT (hash) DO NOTHING`,
     [
       artifactHash,
-      'upload',
-      sourceSubtitle,
+      srcRegistry || 'upload',
+      srcId || sourceSubtitle,
       sourceLang,
       targetLang,
       model,

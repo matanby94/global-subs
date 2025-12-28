@@ -53,17 +53,8 @@ export async function translationsRoutes(fastify: FastifyInstance) {
         signedUrl = `/api/translations/status/${artifactHash}`;
       }
 
-      // Charge credits based on pricing rule
-      const pricingResult = await fastify.db.query(
-        "SELECT * FROM pricing_rules WHERE name = 'Standard Usage' LIMIT 1"
-      );
-
-      if (pricingResult.rows.length === 0) {
-        throw new Error('Pricing rule not found');
-      }
-
-      const pricingRule = pricingResult.rows[0];
-      const creditsToCharge = parseFloat(pricingRule.amount_per_use_credits);
+      // Charge 1 credit per translation (bundle-based pricing model)
+      const creditsToCharge = 1;
 
       // Check and debit credits
       const client = await fastify.db.connect();
@@ -98,18 +89,25 @@ export async function translationsRoutes(fastify: FastifyInstance) {
           [user.userId, wallet.id, -creditsToCharge, 'Translation request', artifactHash]
         );
 
-        // Record serve event
+        // Record serve event (log for both cache hit and miss)
+        // For cached translations, get pricing_rule_id from first rule or use default
+        let pricingRuleId = null;
         if (cached && artifactResult.rows.length > 0) {
-          await client.query(
-            'INSERT INTO serve_events (user_id, artifact_hash, pricing_rule_id, credits_debited, request_meta) VALUES ($1, $2, $3, $4, $5)',
-            [
-              user.userId,
-              artifactHash,
-              pricingRule.id,
-              creditsToCharge,
-              JSON.stringify({ cached: true }),
-            ]
-          );
+          const pricingResult = await client.query('SELECT id FROM pricing_rules LIMIT 1');
+          pricingRuleId = pricingResult.rows.length > 0 ? pricingResult.rows[0].id : null;
+
+          if (pricingRuleId) {
+            await client.query(
+              'INSERT INTO serve_events (user_id, artifact_hash, pricing_rule_id, credits_debited, request_meta) VALUES ($1, $2, $3, $4, $5)',
+              [
+                user.userId,
+                artifactHash,
+                pricingRuleId,
+                creditsToCharge,
+                JSON.stringify({ cached: true }),
+              ]
+            );
+          }
         }
 
         await client.query('COMMIT');

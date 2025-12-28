@@ -35,10 +35,15 @@ pnpm run demo
 
 echo "✅ Development environment is ready!"
 echo ""
+
+WEB_PORT=${WEB_PORT:-3010}
+API_PORT=${API_PORT:-3011}
+ADDON_PORT=${ADDON_PORT:-3012}
+
 echo "🌐 Services:"
-echo "   Web:           http://localhost:3000"
-echo "   API:           http://localhost:3001"
-echo "   Stremio Addon: http://localhost:7000"
+echo "   Web:           http://localhost:${WEB_PORT}"
+echo "   API:           http://localhost:${API_PORT}"
+echo "   Stremio Addon: http://localhost:${ADDON_PORT}"
 echo "   MinIO Console: http://localhost:9001"
 echo ""
 echo "📝 Demo user: demo@stremio-ai.com (100 credits)"

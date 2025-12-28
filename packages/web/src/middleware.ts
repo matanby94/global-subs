@@ -4,6 +4,14 @@ import type { NextRequest } from 'next/server';
 export function middleware(_request: NextRequest) {
   const response = NextResponse.next();
 
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://localhost:3011';
+  let apiOrigin = 'http://localhost:3011';
+  try {
+    apiOrigin = new URL(apiUrl).origin;
+  } catch {
+    // fall back to the default origin
+  }
+
   // Security headers
   response.headers.set('X-Frame-Options', 'DENY');
   response.headers.set('X-Content-Type-Options', 'nosniff');
@@ -16,7 +24,7 @@ export function middleware(_request: NextRequest) {
   // Content Security Policy
   response.headers.set(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' http://localhost:3001"
+    `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' ${apiOrigin}`
   );
 
   // HSTS - only in production

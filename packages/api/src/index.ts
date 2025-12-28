@@ -1,3 +1,4 @@
+import './fastify-decorators';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
@@ -7,10 +8,11 @@ import { creditsRoutes } from './routes/credits';
 import { translationsRoutes } from './routes/translations';
 import { meRoutes } from './routes/me';
 import { signRoutes } from './routes/sign';
+import { addonRoutes } from './routes/addon';
 import { db } from './db';
 import { s3Client } from './storage';
 
-const PORT = parseInt(process.env.API_PORT || '3001', 10);
+const PORT = parseInt(process.env.API_PORT || process.env.PORT || '3011', 10);
 const HOST = process.env.API_HOST || '0.0.0.0';
 
 async function buildServer() {
@@ -30,8 +32,13 @@ async function buildServer() {
   });
 
   // Plugins
+  const defaultCorsOrigin =
+    process.env.WEB_ORIGIN ||
+    process.env.WEB_URL ||
+    (process.env.WEB_PORT ? `http://localhost:${process.env.WEB_PORT}` : 'http://localhost:3010');
+
   await fastify.register(cors, {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: process.env.CORS_ORIGIN || defaultCorsOrigin,
     credentials: true,
   });
 
@@ -59,6 +66,7 @@ async function buildServer() {
   await fastify.register(translationsRoutes, { prefix: '/api/translations' });
   await fastify.register(meRoutes, { prefix: '/api/me' });
   await fastify.register(signRoutes, { prefix: '/api/sign' });
+  await fastify.register(addonRoutes, { prefix: '/api/addon' });
 
   return fastify;
 }

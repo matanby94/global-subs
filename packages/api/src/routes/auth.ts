@@ -22,11 +22,22 @@ export async function authRoutes(fastify: FastifyInstance) {
 
       const user = result.rows[0];
 
-      // Create wallet
+      // Create wallet with 10 free trial credits
       await fastify.db.query('INSERT INTO wallets (user_id, balance_credits) VALUES ($1, $2)', [
         user.id,
-        0,
+        10,
       ]);
+
+      // Log free trial credit grant
+      const walletResult = await fastify.db.query('SELECT id FROM wallets WHERE user_id = $1', [
+        user.id,
+      ]);
+      const walletId = walletResult.rows[0].id;
+
+      await fastify.db.query(
+        'INSERT INTO credit_transactions (user_id, wallet_id, delta, reason, reference) VALUES ($1, $2, $3, $4, $5)',
+        [user.id, walletId, 10, 'Free trial welcome bonus', 'signup']
+      );
 
       const token = fastify.jwt.sign({ userId: user.id, email: user.email });
 

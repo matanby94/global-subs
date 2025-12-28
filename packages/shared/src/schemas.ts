@@ -25,6 +25,10 @@ export const TopUpCreditsSchema = z.object({
   paymentMethodId: z.string(),
 });
 
+export const PurchaseBundleSchema = z.object({
+  bundle: z.enum(['starter', 'pro']),
+});
+
 export const TranslateSubtitleSchema = z.object({
   sourceSubtitle: z.string().url().or(z.string()),
   sourceLang: z.string().length(2),
