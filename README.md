@@ -136,6 +136,7 @@ pnpm run format
 ## 📖 Documentation
 
 - [Architecture Overview](./docs/ARCHITECTURE.md)
+- [Package Communication & Diagrams](./docs/PACKAGE_COMMUNICATION.md)
 - [Getting Started Guide](./docs/GETTING_STARTED.md)
 - [Test Execution Summary](./docs/TEST_EXECUTION_SUMMARY.md)
 

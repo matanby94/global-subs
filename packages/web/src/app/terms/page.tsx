@@ -83,7 +83,7 @@ export default function TermsPage() {
 
                     <h2 className="text-2xl font-bold mt-8 mb-4 text-primary">8. Limitation of Liability</h2>
                     <p className="text-gray-700 mb-6">
-                        GlobalSubs is provided "as is" without warranties of any kind. We are not liable
+                        GlobalSubs is provided &quot;as is&quot; without warranties of any kind. We are not liable
                         for any translation errors, service interruptions, or data loss. Our liability is
                         limited to the amount you paid for the service.
                     </p>

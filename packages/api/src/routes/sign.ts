@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
-import { BUCKET_NAME } from '../storage';
+import { BUCKET_NAME, s3PresignClient } from '../storage';
 import { authenticateUser } from '../middleware/auth';
 
 export async function signRoutes(fastify: FastifyInstance) {
@@ -25,9 +25,10 @@ export async function signRoutes(fastify: FastifyInstance) {
       const command = new GetObjectCommand({
         Bucket: BUCKET_NAME,
         Key: artifact.storage_key,
+        ResponseContentType: 'text/vtt; charset=utf-8',
       });
 
-      const signedUrl = await getSignedUrl(fastify.s3, command, { expiresIn: 3600 });
+      const signedUrl = await getSignedUrl(s3PresignClient, command, { expiresIn: 3600 });
 
       return reply.send({ signedUrl });
     } catch (err) {

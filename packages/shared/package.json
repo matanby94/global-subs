@@ -7,13 +7,19 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint src"
   },
   "dependencies": {
+    "adm-zip": "^0.5.16",
+    "ioredis": "^5.3.2",
+    "opensubtitles-api": "^5.1.2",
     "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/node": "^20.10.5",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^4.0.18"
   }
 }

@@ -1,17 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { useAuth } from '../../providers/auth-provider';
 
 export default function LibraryPage() {
-    const [user, setUser] = useState<{ email: string } | null>(null);
+    const { user, loading } = useAuth();
 
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        if (!token) {
+        if (!loading && !user) {
             window.location.href = '/app';
         }
-    }, []);
+    }, [loading, user]);
 
     return (
         <div className="min-h-screen bg-gray-50">

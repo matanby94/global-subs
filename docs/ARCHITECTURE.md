@@ -1,5 +1,7 @@
 # Architecture Overview
 
+For a package-by-package connectivity map and sequence diagrams, see [PACKAGE_COMMUNICATION.md](./PACKAGE_COMMUNICATION.md).
+
 ## System Design
 
 Stremio AI Subtitles is a cloud-agnostic SaaS platform for translating subtitles using LLM technology.

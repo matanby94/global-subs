@@ -4,15 +4,17 @@ export class GoogleAdapter {
   private apiKey: string;
 
   constructor() {
-    this.apiKey = process.env.GOOGLE_API_KEY || 'test-key';
+    const apiKey = process.env.GOOGLE_API_KEY;
+    if (!apiKey) {
+      throw new Error('GOOGLE_API_KEY environment variable must be set');
+    }
+    this.apiKey = apiKey;
   }
 
-  async translate(content: string, sourceLang: string, targetLang: string): Promise<string> {
-    // Simplified - would use Gemini API
-    // For now, mock translation
-    console.log(`Google translate: ${sourceLang} -> ${targetLang}`);
-
-    // In production, call Google Translate or Gemini API
-    return content.replace(/(\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3})/g, '$1');
+  async translate(_content: string, sourceLang: string, targetLang: string): Promise<string> {
+    // TODO: Implement Gemini API translation
+    throw new Error(
+      `Google/Gemini translation is not yet implemented (${sourceLang} -> ${targetLang}). Use model 'gpt-4' instead.`
+    );
   }
 }

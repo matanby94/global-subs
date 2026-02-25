@@ -40,3 +40,9 @@ export const SignUrlSchema = z.object({
   artifactHash: z.string(),
   expiresIn: z.number().default(3600),
 });
+
+export const ScrapeJobSchema = z.object({
+  srcRegistry: z.string().min(1),
+  srcId: z.string().min(1),
+  lang: z.string().length(2),
+});

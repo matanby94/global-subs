@@ -6,4 +6,7 @@ const connectionString =
 export const db = new Pool({
   connectionString,
   max: 20,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
+  ...(process.env.DATABASE_SSL === 'true' && { ssl: { rejectUnauthorized: true } }),
 });

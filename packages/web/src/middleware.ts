@@ -21,10 +21,13 @@ export function middleware(_request: NextRequest) {
     'camera=(), microphone=(), geolocation=(), interest-cohort=()'
   );
 
+  // Allow Google Sign-In popup to communicate back via postMessage
+  response.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+
   // Content Security Policy
   response.headers.set(
     'Content-Security-Policy',
-    `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' ${apiOrigin}`
+    `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://accounts.google.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; frame-src https://accounts.google.com; connect-src 'self' ${apiOrigin} https://accounts.google.com`
   );
 
   // HSTS - only in production

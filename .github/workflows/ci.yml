@@ -52,7 +52,10 @@ jobs:
 
       - name: Run database migrations
         run: |
-          PGPASSWORD=stremio_dev psql -h localhost -U stremio -d stremio_ai_subs < infra/migrations/001_init.sql
+          for f in infra/migrations/*.sql; do
+            echo "Applying $f..."
+            PGPASSWORD=stremio_dev psql -h localhost -U stremio -d stremio_ai_subs < "$f"
+          done
 
       - name: Type check
         run: pnpm run typecheck
@@ -74,13 +77,29 @@ jobs:
           pnpm --filter @stremio-ai-subs/api run dev &
           pnpm --filter @stremio-ai-subs/web run dev &
           sleep 15
+        env:
+          DATABASE_URL: postgresql://stremio:stremio_dev@localhost:5432/stremio_ai_subs
+          REDIS_HOST: localhost
+          REDIS_PORT: '6379'
+          JWT_SECRET: ci-test-secret-minimum-16-chars
+          S3_ENDPOINT: http://localhost:9000
+          S3_ACCESS_KEY_ID: minioadmin
+          S3_SECRET_ACCESS_KEY: minioadmin
+          S3_BUCKET: stremio-ai-subs
+          OPENAI_API_KEY: sk-test-ci-dummy
+          CORS_ORIGIN: http://localhost:3000
 
       - name: Run E2E tests
         run: pnpm run test:e2e
         env:
           DATABASE_URL: postgresql://stremio:stremio_dev@localhost:5432/stremio_ai_subs
           REDIS_HOST: localhost
-          REDIS_PORT: 6379
+          REDIS_PORT: '6379'
+          JWT_SECRET: ci-test-secret-minimum-16-chars
+          S3_ENDPOINT: http://localhost:9000
+          S3_ACCESS_KEY_ID: minioadmin
+          S3_SECRET_ACCESS_KEY: minioadmin
+          S3_BUCKET: stremio-ai-subs
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4

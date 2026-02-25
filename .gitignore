@@ -15,6 +15,7 @@ out
 build
 
 # Environment
+.env
 .env*.local
 .env.local
 .env.development.local
@@ -42,6 +43,9 @@ packages/e2e/test-results
 packages/e2e/playwright-report
 packages/e2e/artifacts
 packages/e2e/.auth
+
+# Scrapers browser state (Playwright storage-state & user-data)
+packages/scrapers/.cache
 
 # Turbo
 .turbo

@@ -4,14 +4,17 @@ export class DeepLAdapter {
   private apiKey: string;
 
   constructor() {
-    this.apiKey = process.env.DEEPL_API_KEY || 'test-key';
+    const apiKey = process.env.DEEPL_API_KEY;
+    if (!apiKey) {
+      throw new Error('DEEPL_API_KEY environment variable must be set');
+    }
+    this.apiKey = apiKey;
   }
 
-  async translate(content: string, sourceLang: string, targetLang: string): Promise<string> {
-    // Simplified - would use DeepL API
-    console.log(`DeepL translate: ${sourceLang} -> ${targetLang}`);
-
-    // In production, call DeepL API
-    return content;
+  async translate(_content: string, sourceLang: string, targetLang: string): Promise<string> {
+    // TODO: Implement DeepL API translation
+    throw new Error(
+      `DeepL translation is not yet implemented (${sourceLang} -> ${targetLang}). Use model 'gpt-4' instead.`
+    );
   }
 }

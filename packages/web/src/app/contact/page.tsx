@@ -36,7 +36,7 @@ export default function ContactPage() {
                                     Message Sent!
                                 </h3>
                                 <p className="text-gray-500 mb-6">
-                                    We'll get back to you as soon as possible.
+                                    We&apos;ll get back to you as soon as possible.
                                 </p>
                                 <button
                                     onClick={() => setSubmitted(false)}

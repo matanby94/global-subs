@@ -1,8 +1,25 @@
 import { FastifyInstance } from 'fastify';
 import { authenticateUser } from '../middleware/auth';
 import { TopUpCreditsSchema, PurchaseBundleSchema } from '@stremio-ai-subs/shared';
+import { AppError } from '../lib/app-error';
+import Stripe from 'stripe';
+
+// ── Stripe setup (gated by env var) ──────────────────────
+// When STRIPE_SECRET_KEY is set, all purchases require a valid Stripe payment.
+// When unset, the API runs in "sandbox" mode (credits added without payment).
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY?.trim();
+const stripe = STRIPE_SECRET_KEY
+  ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' })
+  : null;
+const isSandbox = !stripe;
 
 export async function creditsRoutes(fastify: FastifyInstance) {
+  if (isSandbox) {
+    fastify.log.warn(
+      'STRIPE_SECRET_KEY not set — credits routes running in SANDBOX mode (no payment verification)'
+    );
+  }
+
   // Get wallet balance
   fastify.get('/balance', { preHandler: authenticateUser }, async (request, reply) => {
     const user = request.user as { userId: string };
@@ -13,7 +30,7 @@ export async function creditsRoutes(fastify: FastifyInstance) {
     );
 
     if (result.rows.length === 0) {
-      return reply.status(404).send({ error: 'Wallet not found' });
+      throw AppError.notFound('Wallet not found', 'WALLET_NOT_FOUND');
     }
 
     return reply.send({ balance: result.rows[0].balance_credits });
@@ -21,133 +38,164 @@ export async function creditsRoutes(fastify: FastifyInstance) {
 
   // Purchase credit bundle
   fastify.post('/purchase', { preHandler: authenticateUser }, async (request, reply) => {
-    try {
-      const user = request.user as { userId: string };
-      const body = PurchaseBundleSchema.parse(request.body);
+    const user = request.user as { userId: string };
+    const body = PurchaseBundleSchema.parse(request.body);
 
-      // Define bundle packages
-      const bundles = {
-        starter: { credits: 100, price: 9 },
-        pro: { credits: 1000, price: 29 },
-      };
+    // Define bundle packages
+    const bundles = {
+      starter: { credits: 100, price: 9 },
+      pro: { credits: 1000, price: 29 },
+    };
 
-      const selectedBundle = bundles[body.bundle];
+    const selectedBundle = bundles[body.bundle];
 
-      // TODO: In production, verify payment with Stripe here
-      // const paymentIntent = await stripe.paymentIntents.create({
-      //   amount: selectedBundle.price * 100, // cents
-      //   currency: 'usd',
-      //   metadata: { userId: user.userId, bundle }
-      // });
-
-      const client = await fastify.db.connect();
-      try {
-        await client.query('BEGIN');
-
-        // Get wallet
-        const walletResult = await client.query(
-          'SELECT id, balance_credits FROM wallets WHERE user_id = $1 FOR UPDATE',
-          [user.userId]
+    // ── Stripe payment verification ──────────────────────
+    // In production (when stripe is configured), require a paymentIntentId
+    // and verify the payment succeeded before granting credits.
+    if (stripe) {
+      const { paymentIntentId } = request.body as { paymentIntentId?: string };
+      if (!paymentIntentId) {
+        throw AppError.badRequest(
+          'paymentIntentId is required for purchases',
+          'MISSING_PAYMENT_INTENT'
         );
-
-        if (walletResult.rows.length === 0) {
-          throw new Error('Wallet not found');
-        }
-
-        const wallet = walletResult.rows[0];
-
-        // Update balance
-        await client.query(
-          'UPDATE wallets SET balance_credits = balance_credits + $1 WHERE id = $2',
-          [selectedBundle.credits, wallet.id]
-        );
-
-        // Record transaction
-        await client.query(
-          'INSERT INTO credit_transactions (user_id, wallet_id, delta, reason, reference) VALUES ($1, $2, $3, $4, $5)',
-          [
-            user.userId,
-            wallet.id,
-            selectedBundle.credits,
-            `Bundle purchase: ${body.bundle}`,
-            `bundle_${body.bundle}_${Date.now()}`,
-          ]
-        );
-
-        await client.query('COMMIT');
-
-        const newBalance = parseFloat(wallet.balance_credits) + selectedBundle.credits;
-
-        return reply.send({
-          success: true,
-          bundle: body.bundle,
-          creditsAdded: selectedBundle.credits,
-          amountPaid: selectedBundle.price,
-          newBalance,
-        });
-      } catch (err) {
-        await client.query('ROLLBACK');
-        throw err;
-      } finally {
-        client.release();
       }
+
+      const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+      if (intent.status !== 'succeeded') {
+        throw AppError.paymentRequired(
+          `Payment not completed. Status: ${intent.status}`,
+          'PAYMENT_NOT_SUCCEEDED'
+        );
+      }
+
+      // Verify amount matches the bundle price (in cents)
+      if (intent.amount !== selectedBundle.price * 100) {
+        throw AppError.badRequest(
+          'Payment amount does not match bundle price',
+          'PAYMENT_AMOUNT_MISMATCH'
+        );
+      }
+
+      // Verify this payment intent hasn't already been used
+      const existingTx = await fastify.db.query(
+        'SELECT id FROM credit_transactions WHERE reference = $1',
+        [`stripe_${paymentIntentId}`]
+      );
+      if (existingTx.rows.length > 0) {
+        throw AppError.conflict('Payment already processed', 'PAYMENT_ALREADY_PROCESSED');
+      }
+    }
+
+    const client = await fastify.db.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Get wallet
+      const walletResult = await client.query(
+        'SELECT id, balance_credits FROM wallets WHERE user_id = $1 FOR UPDATE',
+        [user.userId]
+      );
+
+      if (walletResult.rows.length === 0) {
+        throw AppError.notFound('Wallet not found', 'WALLET_NOT_FOUND');
+      }
+
+      const wallet = walletResult.rows[0];
+
+      // Update balance
+      await client.query(
+        'UPDATE wallets SET balance_credits = balance_credits + $1 WHERE id = $2',
+        [selectedBundle.credits, wallet.id]
+      );
+
+      // Record transaction with payment reference
+      const reference = stripe
+        ? `stripe_${(request.body as { paymentIntentId: string }).paymentIntentId}`
+        : `sandbox_${body.bundle}_${Date.now()}`;
+
+      await client.query(
+        'INSERT INTO credit_transactions (user_id, wallet_id, delta, reason, reference) VALUES ($1, $2, $3, $4, $5)',
+        [
+          user.userId,
+          wallet.id,
+          selectedBundle.credits,
+          `Bundle purchase: ${body.bundle}`,
+          reference,
+        ]
+      );
+
+      await client.query('COMMIT');
+
+      const newBalance = parseFloat(wallet.balance_credits) + selectedBundle.credits;
+
+      return reply.send({
+        success: true,
+        bundle: body.bundle,
+        creditsAdded: selectedBundle.credits,
+        amountPaid: selectedBundle.price,
+        newBalance,
+        sandbox: isSandbox,
+      });
     } catch (err) {
-      fastify.log.error(err);
-      return reply.status(400).send({ error: 'Failed to purchase bundle' });
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
     }
   });
 
-  // Top up credits (sandbox mode for demo)
+  // Top up credits (sandbox mode for demo — disabled when Stripe is configured)
   fastify.post('/topup', { preHandler: authenticateUser }, async (request, reply) => {
+    if (!isSandbox) {
+      throw AppError.forbidden(
+        'Direct top-up is disabled in production. Use /purchase with a Stripe payment.',
+        'TOPUP_DISABLED'
+      );
+    }
+
+    const user = request.user as { userId: string };
+    const body = TopUpCreditsSchema.parse(request.body);
+
+    const client = await fastify.db.connect();
     try {
-      const user = request.user as { userId: string };
-      const body = TopUpCreditsSchema.parse(request.body);
+      await client.query('BEGIN');
 
-      // In production, verify payment with Stripe here
-      // For now, just add credits
+      // Get wallet
+      const walletResult = await client.query(
+        'SELECT id, balance_credits FROM wallets WHERE user_id = $1 FOR UPDATE',
+        [user.userId]
+      );
 
-      const client = await fastify.db.connect();
-      try {
-        await client.query('BEGIN');
-
-        // Get wallet
-        const walletResult = await client.query(
-          'SELECT id, balance_credits FROM wallets WHERE user_id = $1 FOR UPDATE',
-          [user.userId]
-        );
-
-        if (walletResult.rows.length === 0) {
-          throw new Error('Wallet not found');
-        }
-
-        const wallet = walletResult.rows[0];
-
-        // Update balance
-        await client.query(
-          'UPDATE wallets SET balance_credits = balance_credits + $1 WHERE id = $2',
-          [body.amount, wallet.id]
-        );
-
-        // Record transaction
-        await client.query(
-          'INSERT INTO credit_transactions (user_id, wallet_id, delta, reason, reference) VALUES ($1, $2, $3, $4, $5)',
-          [user.userId, wallet.id, body.amount, 'Top-up', body.paymentMethodId]
-        );
-
-        await client.query('COMMIT');
-
-        const newBalance = parseFloat(wallet.balance_credits) + body.amount;
-
-        return reply.send({ success: true, newBalance });
-      } catch (err) {
-        await client.query('ROLLBACK');
-        throw err;
-      } finally {
-        client.release();
+      if (walletResult.rows.length === 0) {
+        throw AppError.notFound('Wallet not found', 'WALLET_NOT_FOUND');
       }
+
+      const wallet = walletResult.rows[0];
+
+      // Update balance
+      await client.query(
+        'UPDATE wallets SET balance_credits = balance_credits + $1 WHERE id = $2',
+        [body.amount, wallet.id]
+      );
+
+      // Record transaction
+      await client.query(
+        'INSERT INTO credit_transactions (user_id, wallet_id, delta, reason, reference) VALUES ($1, $2, $3, $4, $5)',
+        [user.userId, wallet.id, body.amount, 'Top-up (sandbox)', `sandbox_topup_${Date.now()}`]
+      );
+
+      await client.query('COMMIT');
+
+      const newBalance = parseFloat(wallet.balance_credits) + body.amount;
+
+      return reply.send({ success: true, newBalance, sandbox: true });
     } catch (err) {
-      fastify.log.error(err);
-      return reply.status(400).send({ error: 'Failed to top up credits' });
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
     }
   });
 

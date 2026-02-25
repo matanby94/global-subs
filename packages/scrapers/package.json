@@ -1,0 +1,35 @@
+{
+  "name": "@stremio-ai-subs/scrapers",
+  "version": "1.0.0",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "opensubtitles-org:profile": "tsx src/scripts/init-opensubtitles-org-profile.ts",
+    "opensubtitles-org:state": "tsx src/scripts/save-opensubtitles-org-state.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.478.0",
+    "@stremio-ai-subs/shared": "workspace:*",
+    "adm-zip": "^0.5.16",
+    "axios": "^1.6.5",
+    "bullmq": "^5.58.5",
+    "dotenv": "^16.4.5",
+    "ioredis": "^5.6.1",
+    "opensubtitles-api": "^5.1.2",
+    "playwright": "^1.50.1",
+    "pg": "^8.11.3",
+    "pino": "^8.17.2",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/node": "^20.10.5",
+    "@types/pg": "^8.15.5",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}
