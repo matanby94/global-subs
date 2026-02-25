@@ -207,7 +207,10 @@ export async function findSubdlDownload(params: {
 
   const subtitles = Array.isArray(parsed.subtitles) ? parsed.subtitles : [];
 
-  // Best-effort selection: first subtitle entry.
+  // Rank entries: prefer episode-specific over multi-episode packs.
+  type Candidate = { sub: Record<string, unknown>; zipIdOrUrl: string; score: number };
+  const candidates: Candidate[] = [];
+
   for (const item of subtitles) {
     const sub = item && typeof item === 'object' ? (item as Record<string, unknown>) : null;
     if (!sub) continue;
@@ -215,6 +218,35 @@ export async function findSubdlDownload(params: {
     const zipIdOrUrl = findZipIdInSubtitleObject(sub);
     if (!zipIdOrUrl) continue;
 
+    // Check season match — reject entries from the wrong season
+    const subSeason = typeof sub.season === 'number' ? sub.season : null;
+    if (params.season != null && subSeason != null && subSeason !== params.season) {
+      continue;
+    }
+
+    let score = 0;
+    if (params.season != null && subSeason === params.season) score += 10;
+
+    if (params.episode != null) {
+      const epFrom = typeof sub.episode_from === 'number' ? sub.episode_from : null;
+      const epEnd = typeof sub.episode_end === 'number' ? sub.episode_end : null;
+      const ep = typeof sub.episode === 'number' ? sub.episode : null;
+
+      if (epFrom === params.episode && epEnd === params.episode) {
+        score += 3;
+      } else if (ep === params.episode && (epFrom == null || epEnd == null)) {
+        score += 2;
+      } else if (epFrom != null && epEnd != null && epFrom <= params.episode && epEnd >= params.episode) {
+        score += 1;
+      }
+    }
+
+    candidates.push({ sub, zipIdOrUrl, score });
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+
+  for (const { sub, zipIdOrUrl } of candidates) {
     const { url: dlUrl, providerRef } = toDownloadUrl(zipIdOrUrl);
     return SubdlDownloadSchema.parse({
       url: dlUrl,
@@ -237,10 +269,33 @@ export async function findSubdlDownload(params: {
   return null;
 }
 
+/**
+ * Match a ZIP entry filename to a specific episode number.
+ * Looks for patterns like S01E07, s1e7, E07, .107. etc.
+ */
+function entryMatchesEpisode(entryName: string, episode: number, season?: number | null): boolean {
+  const name = entryName.toLowerCase();
+  const seMatch = name.match(/s(\d{1,2})e(\d{1,3})/i);
+  if (seMatch) {
+    const fileSeason = parseInt(seMatch[1], 10);
+    const fileEpisode = parseInt(seMatch[2], 10);
+    if (season != null) {
+      return fileSeason === season && fileEpisode === episode;
+    }
+    return fileEpisode === episode;
+  }
+  const eMatch = name.match(/\be(\d{1,3})\b/i);
+  if (eMatch) return parseInt(eMatch[1], 10) === episode;
+  return false;
+}
+
 export async function downloadSubdlSubtitleText(
-  downloadUrl: string
+  downloadUrl: string,
+  opts?: { episode?: number | null; season?: number | null }
 ): Promise<{ text: string; filename: string }> {
   const debug = getDebug();
+  const targetEpisode = opts?.episode ?? null;
+  const targetSeason = opts?.season ?? null;
 
   await rateLimit();
 
@@ -260,15 +315,33 @@ export async function downloadSubdlSubtitleText(
   const zip = new AdmZip(buf);
   const entries = zip.getEntries();
 
-  const pick = (ext: string) =>
-    entries.find((e) => !e.isDirectory && e.entryName.toLowerCase().endsWith(ext));
+  const SUBTITLE_EXTS = ['.srt', '.vtt', '.ass', '.ssa'];
+  const subtitleEntries = entries.filter(
+    (e) => !e.isDirectory && SUBTITLE_EXTS.some((ext) => e.entryName.toLowerCase().endsWith(ext))
+  );
 
-  const entry =
-    pick('.srt') ||
-    pick('.vtt') ||
-    pick('.ass') ||
-    pick('.ssa') ||
-    entries.find((e) => !e.isDirectory);
+  let entry: ReturnType<typeof zip.getEntries>[number] | undefined;
+
+  // If we have a target episode, match by season+episode number
+  if (targetEpisode != null && subtitleEntries.length > 1) {
+    entry = subtitleEntries.find((e) => entryMatchesEpisode(e.entryName, targetEpisode, targetSeason));
+    if (debug && entry) {
+      console.log('[subdl] matched episode', {
+        season: targetSeason,
+        episode: targetEpisode,
+        entry: entry.entryName,
+        totalEntries: subtitleEntries.length,
+      });
+    }
+  }
+
+  // Fallback: pick first subtitle by extension priority
+  if (!entry) {
+    const pick = (ext: string) =>
+      entries.find((e) => !e.isDirectory && e.entryName.toLowerCase().endsWith(ext));
+    entry = pick('.srt') || pick('.vtt') || pick('.ass') || pick('.ssa') || entries.find((e) => !e.isDirectory);
+  }
+
   if (!entry) {
     throw new Error('SubDL zip had no entries');
   }

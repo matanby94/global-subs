@@ -58,55 +58,69 @@ export class OpenAIAdapter {
   ): Promise<string[]> {
     const textsToTranslate = cues.map((c) => c.text);
 
-    const model = process.env.OPENAI_MODEL || 'gpt-5.2';
+    const model = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
 
-    // Batch translate
-    const batchSize = 10;
-    const translated: string[] = [];
+    // Batch translate — larger batches = fewer API calls = faster pipeline
+    const batchSize = parseInt(process.env.OPENAI_BATCH_SIZE || '50', 10);
+    const concurrency = parseInt(process.env.OPENAI_CONCURRENCY || '3', 10);
+    const translated: string[] = new Array(textsToTranslate.length).fill('');
 
+    // Build all batch tasks
+    const batches: Array<{ start: number; batch: string[] }> = [];
     for (let i = 0; i < textsToTranslate.length; i += batchSize) {
-      const batch = textsToTranslate.slice(i, i + batchSize);
+      batches.push({ start: i, batch: textsToTranslate.slice(i, i + batchSize) });
+    }
 
-      const payload = batch.map((text, idx) => ({ id: i + idx, text }));
-      const prompt =
-        `Translate each item's "text" from ${sourceLang} to ${targetLang}.\n` +
-        `Rules:\n` +
-        `- Return ONLY valid JSON (no markdown, no code fences).\n` +
-        `- Output must be a JSON array of objects: {"id": number, "translation": string}.\n` +
-        `- Preserve line breaks using JSON escapes ONLY: output must use \\n (two characters) for new lines inside strings; do not emit literal newlines inside JSON strings.\n` +
-        `- Escape any double-quotes inside translations as \\".\n` +
-        `- Keep the same ids and the same order as input.\n` +
-        `- If input text is empty, translation must be "".\n\n` +
-        `Input JSON:\n${JSON.stringify(payload)}`;
+    // Process batches with bounded concurrency
+    for (let c = 0; c < batches.length; c += concurrency) {
+      const chunk = batches.slice(c, c + concurrency);
+      const results = await Promise.all(
+        chunk.map(async ({ start, batch }) => {
+          const payload = batch.map((text, idx) => ({ id: start + idx, text }));
+          const prompt =
+            `Translate each item's "text" from ${sourceLang} to ${targetLang}.\n` +
+            `Rules:\n` +
+            `- Return ONLY valid JSON (no markdown, no code fences).\n` +
+            `- Output must be a JSON array of objects: {"id": number, "translation": string}.\n` +
+            `- For multi-line cues, use a real newline character inside the JSON string value (the standard JSON \\n escape).\n` +
+            `- Keep the same ids and the same order as input.\n` +
+            `- If input text is empty, translation must be "".\n\n` +
+            `Input JSON:\n${JSON.stringify(payload)}`;
 
-      const response = await this.client.chat.completions.create({
-        model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a professional subtitle translator. Preserve meaning and timing.',
-          },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.3,
-      });
+          const response = await this.client.chat.completions.create({
+            model,
+            messages: [
+              {
+                role: 'system',
+                content: 'You are a professional subtitle translator. Preserve meaning and timing.',
+              },
+              { role: 'user', content: prompt },
+            ],
+            temperature: 0.3,
+          });
 
-      const result = response.choices[0].message.content || '';
+          const result = response.choices[0].message.content || '';
 
-      const parsed = this.parseJsonArray(result);
-      const byId = new Map<number, string>();
-      for (const item of parsed) {
-        if (!item || typeof item !== 'object') continue;
-        const id = (item as { id?: unknown }).id;
-        const translation = (item as { translation?: unknown }).translation;
-        if (typeof id === 'number' && typeof translation === 'string') {
-          byId.set(id, translation);
+          const parsed = this.parseJsonArray(result);
+          const byId = new Map<number, string>();
+          for (const item of parsed) {
+            if (!item || typeof item !== 'object') continue;
+            const id = (item as { id?: unknown }).id;
+            const translation = (item as { translation?: unknown }).translation;
+            if (typeof id === 'number' && typeof translation === 'string') {
+              // Fix LLMs that return literal two-char "\n" instead of real newlines.
+              byId.set(id, translation.replace(/\\n/g, '\n'));
+            }
+          }
+
+          return { start, batch, byId };
+        })
+      );
+
+      for (const { start, batch, byId } of results) {
+        for (let j = 0; j < batch.length; j++) {
+          translated[start + j] = byId.get(start + j) ?? '';
         }
-      }
-
-      for (let j = 0; j < batch.length; j++) {
-        const id = i + j;
-        translated.push(byId.get(id) ?? '');
       }
     }
 

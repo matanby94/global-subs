@@ -56,7 +56,10 @@ export async function resolveSubtitleText(
           lang,
         });
         if (!candidate) return null;
-        const dl = await downloadSubdlSubtitleText(candidate.url);
+        const dl = await downloadSubdlSubtitleText(candidate.url, {
+          episode: params.episode,
+          season: params.season,
+        });
         return {
           provider: 'subdl' as const,
           downloadUrl: candidate.url,

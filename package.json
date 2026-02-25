@@ -5,6 +5,8 @@
   "description": "Stremio AI Subtitles - LLM-translated subtitles SaaS platform",
   "scripts": {
     "dev": "turbo run dev --parallel",
+    "dev:no-scrapers": "pnpm --filter '!@stremio-ai-subs/scrapers' --parallel -r run dev",
+    "dev:scrapers": "pnpm --filter @stremio-ai-subs/scrapers dev",
     "build": "turbo run build",
     "test": "turbo run test",
     "test:e2e": "pnpm --filter e2e test:e2e",

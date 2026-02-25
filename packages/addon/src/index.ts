@@ -2,14 +2,54 @@ import './env';
 import { addonBuilder } from 'stremio-addon-sdk';
 import http from 'node:http';
 import qs from 'node:querystring';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { db } from './db';
 
 const PORT = parseInt(process.env.ADDON_PORT || process.env.PORT || '3012', 10);
 const HOST = process.env.ADDON_HOST || '0.0.0.0';
+const ADDON_PUBLIC_URL = process.env.ADDON_PUBLIC_URL || `http://127.0.0.1:${PORT}`;
 
 console.log('[addon] logging config', {
   logLevel: process.env.LOG_LEVEL || 'info',
   debugAddon: process.env.DEBUG_ADDON === '1',
 });
+
+// ──────────────────────────────────────────────
+// S3 client for presigning artifact URLs
+// ──────────────────────────────────────────────
+const s3PresignClient = new S3Client({
+  endpoint: process.env.S3_ENDPOINT,
+  region: process.env.S3_REGION || 'us-east-1',
+  credentials: {
+    accessKeyId: process.env.S3_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
+  },
+  forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
+});
+const S3_BUCKET = process.env.S3_BUCKET || 'GlobalSubs';
+
+// ──────────────────────────────────────────────
+// Placeholder VTT shown while translation is in progress.
+// ──────────────────────────────────────────────
+const PLACEHOLDER_VTT = [
+  'WEBVTT',
+  '',
+  '1',
+  '00:00:01.000 --> 00:01:00.000',
+  '🌐 GlobalSubs is translating your subtitles…',
+  'Please wait a few minutes and reopen this episode.',
+  '',
+  '2',
+  '00:01:00.000 --> 00:05:00.000',
+  '🌐 Translation in progress…',
+  'Close and reopen to check if subtitles are ready.',
+  '',
+  '3',
+  '00:05:00.000 --> 99:59:59.000',
+  '🌐 Subtitles should be ready by now.',
+  'Close and reopen this episode to load them.',
+].join('\n');
 
 const manifest = {
   id: 'com.globalsubs.addon',
@@ -23,6 +63,27 @@ const manifest = {
 };
 
 const builder = new addonBuilder(manifest);
+
+// Stremio addon protocol cache directives — prevent stremio-server from
+// caching subtitle responses so "translating" placeholders get replaced by
+// real subtitles on the next video open.
+const NO_CACHE = { cacheMaxAge: 0, staleRevalidate: 0, staleError: 0 } as const;
+
+/**
+ * Build a branded lang string for Stremio's subtitle picker.
+ * Uses a non-ISO string so Stremio displays it verbatim instead of mapping
+ * it to a built-in language name.
+ */
+function buildSubtitleLang(dstLang: string): string {
+  try {
+    const dn = new Intl.DisplayNames(['en'], { type: 'language' });
+    const pretty = dn.of(dstLang);
+    if (pretty && pretty.toLowerCase() !== dstLang.toLowerCase()) return `${pretty} - GlobalSubs`;
+  } catch {
+    /* fall through */
+  }
+  return `${dstLang.toUpperCase()} - GlobalSubs`;
+}
 
 builder.defineSubtitlesHandler(async (args: unknown) => {
   const a = args as unknown as {
@@ -40,7 +101,7 @@ builder.defineSubtitlesHandler(async (args: unknown) => {
 
   if (!addonToken && (!jwtToken || !dstLang)) {
     console.warn('Addon not configured: missing addon token (or JWT+dstLang)');
-    return { subtitles: [] };
+    return { subtitles: [], ...NO_CACHE };
   }
 
   const apiUrl = process.env.API_URL || 'http://localhost:3011';
@@ -64,28 +125,6 @@ builder.defineSubtitlesHandler(async (args: unknown) => {
     });
   }
 
-  // Placeholder VTT shown while translation is in progress.
-  // Uses a data URI so no hosting is needed — Stremio loads it inline.
-  const PLACEHOLDER_VTT = [
-    'WEBVTT',
-    '',
-    '1',
-    '00:00:01.000 --> 00:01:00.000',
-    '🌐 GlobalSubs is translating your subtitles…',
-    'Please wait a few minutes and reopen this episode.',
-    '',
-    '2',
-    '00:01:00.000 --> 00:05:00.000',
-    '🌐 Translation in progress…',
-    'Close and reopen to check if subtitles are ready.',
-    '',
-    '3',
-    '00:05:00.000 --> 99:59:59.000',
-    '🌐 Subtitles should be ready by now.',
-    'Close and reopen this episode to load them.',
-  ].join('\n');
-  const PLACEHOLDER_URL = `data:text/vtt;charset=utf-8,${encodeURIComponent(PLACEHOLDER_VTT)}`;
-
   try {
     const ensureBody = {
       type,
@@ -101,6 +140,9 @@ builder.defineSubtitlesHandler(async (args: unknown) => {
 
     if (debug) console.log('[addon] POST /api/addon/ensure', ensureBody);
 
+    // Fire-and-forget: call ensure to trigger the scrape/translate pipeline.
+    // We don't wait for the result to decide what URL to return — we always
+    // return a dynamic /sub URL that resolves at play-time.
     const res = await fetch(`${apiUrl}/api/addon/ensure`, {
       method: 'POST',
       headers,
@@ -108,10 +150,7 @@ builder.defineSubtitlesHandler(async (args: unknown) => {
     });
 
     if (debug) {
-      console.log('[addon] ensure response', {
-        status: res.status,
-        ok: res.ok,
-      });
+      console.log('[addon] ensure response', { status: res.status, ok: res.ok });
     }
 
     if (!res.ok) {
@@ -123,7 +162,7 @@ builder.defineSubtitlesHandler(async (args: unknown) => {
         );
       }
       console.error('Addon ensure failed:', res.status);
-      return { subtitles: [] };
+      return { subtitles: [], ...NO_CACHE };
     }
 
     const json: unknown = await res.json();
@@ -138,56 +177,45 @@ builder.defineSubtitlesHandler(async (args: unknown) => {
       console.log('[addon] ensure json', preview);
     }
 
-    const status =
+    // Resolve the dstLang for label and dynamic URL.
+    // Prefer what the API returned (authoritative for token-based auth),
+    // then the locally-known dstLang from config.
+    const responseDstLang =
       json &&
       typeof json === 'object' &&
-      typeof (json as Record<string, unknown>).status === 'string'
-        ? ((json as Record<string, unknown>).status as string)
-        : 'unknown';
+      typeof (json as Record<string, unknown>).dstLang === 'string'
+        ? ((json as Record<string, unknown>).dstLang as string)
+        : null;
+    const effectiveDstLang = responseDstLang || dstLang || 'he';
 
-    const subtitlesRaw =
-      json && typeof json === 'object' && Array.isArray((json as { subtitles?: unknown }).subtitles)
-        ? ((json as { subtitles?: unknown }).subtitles as unknown[])
-        : [];
+    // Build a dynamic VTT URL that the addon serves itself.
+    // This URL always resolves to the latest content: if the artifact
+    // exists, it 302-redirects to the S3 signed URL; if translation is
+    // still processing, it returns the placeholder VTT inline.
+    //
+    // This bypasses stremio-core's in-memory subtitle response cache:
+    // even if Stremio caches the subtitle picker entry, the VTT URL
+    // is fetched fresh on each play.
+    const encodedId = encodeURIComponent(id);
+    const dynamicVttUrl = `${ADDON_PUBLIC_URL}/${addonToken || 'jwt'}/sub/${effectiveDstLang}/${type}/${encodedId}.vtt`;
 
-    const subtitles = subtitlesRaw
-      .map((s: unknown) => {
-        const o = s && typeof s === 'object' ? (s as Record<string, unknown>) : null;
-        const url = typeof o?.url === 'string' ? o.url : null;
-        const lang = typeof o?.lang === 'string' ? o.lang : null;
-        const label = typeof o?.label === 'string' ? o.label : null;
-        const id = typeof o?.id === 'string' ? o.id : url;
-        if (!url || !lang) return null;
-        return label ? { id: id || url, url, lang, label } : { id: id || url, url, lang };
-      })
-      .filter((x): x is { id: string; url: string; lang: string; label?: string } => Boolean(x));
+    const lang = buildSubtitleLang(effectiveDstLang);
 
-    // If translation is in-flight, return a placeholder subtitle immediately
-    // so the user knows their subtitles are being prepared.
-    if (status === 'processing' && subtitles.length === 0) {
-      console.log(`[addon] Translation in-flight for ${id}, returning placeholder subtitle`);
-      return {
-        subtitles: [
-          {
-            id: 'globalsubs-processing',
-            url: PLACEHOLDER_URL,
-            lang: 'heb',
-            label: '🌐 Translating… (reload in a few min)',
-          },
-        ],
-        // Tell Stremio not to cache this response so the real
-        // subtitles appear when the user re-enters the stream.
-        cacheMaxAge: 0,
-      } as {
-        subtitles: { id: string; url: string; lang: string; label?: string }[];
-        cacheMaxAge?: number;
-      };
-    }
+    console.log(`[addon] Returning dynamic VTT URL for ${id}: ${dynamicVttUrl}`);
 
-    return { subtitles };
+    return {
+      subtitles: [
+        {
+          id: `globalsubs-${effectiveDstLang}`,
+          url: dynamicVttUrl,
+          lang,
+        },
+      ],
+      ...NO_CACHE,
+    };
   } catch (err: unknown) {
     console.error('Error calling API ensure:', err);
-    return { subtitles: [] };
+    return { subtitles: [], ...NO_CACHE };
   }
 });
 
@@ -196,10 +224,15 @@ const addonInterface = builder.getInterface();
 function sendJson(res: http.ServerResponse, statusCode: number, body: unknown) {
   res.statusCode = statusCode;
   res.setHeader('content-type', 'application/json; charset=utf-8');
-  // If the response includes cacheMaxAge: 0 (e.g. placeholder subtitles),
-  // set Cache-Control headers so Stremio doesn't cache stale responses.
+  // Set aggressive no-cache headers on all subtitle responses so
+  // stremio-server never serves stale "translating" placeholders.
   if (body && typeof body === 'object' && (body as Record<string, unknown>).cacheMaxAge === 0) {
-    res.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+    res.setHeader(
+      'cache-control',
+      'no-cache, no-store, must-revalidate, max-age=0, stale-while-revalidate=0, stale-if-error=0'
+    );
+    res.setHeader('pragma', 'no-cache');
+    res.setHeader('expires', '0');
   }
   res.end(JSON.stringify(body));
 }
@@ -234,7 +267,7 @@ function extractPrefixConfig(pathname: string): {
     return { restPath: rest, config: { addonToken, userId } };
   }
   // Backwards-compatible: /:token/... (opaque token) or /:b64config/... (JSON config)
-  if (parts.length >= 2 && (parts[1] === 'manifest.json' || parts[1] === 'subtitles')) {
+  if (parts.length >= 2 && (parts[1] === 'manifest.json' || parts[1] === 'subtitles' || parts[1] === 'sub')) {
     const first = parts[0];
     const rest = '/' + parts.slice(1).join('/');
     // We do NOT JSON-parse opaque tokens here.
@@ -242,6 +275,88 @@ function extractPrefixConfig(pathname: string): {
     return { restPath: rest, config: { addonToken: first } };
   }
   return { restPath: pathname, config: {} };
+}
+
+// ──────────────────────────────────────────────
+// Dynamic /sub endpoint — serves VTT content on every request.
+//
+// URL format: /<token>/sub/<dstLang>/<type>/<stremioId>.vtt
+//
+// This is the core of the stremio-core cache bypass: the subtitle
+// picker entry always points here. On each request we query the DB:
+//   • Artifact exists  → 302 redirect to presigned S3 URL
+//   • Still processing → serve placeholder VTT inline (no-cache)
+//
+// Because the VTT URL is fetched fresh every time Stremio plays,
+// stremio-core's cached subtitle picker entry remains valid — only
+// the VTT content changes dynamically.
+// ──────────────────────────────────────────────
+async function handleSubEndpoint(
+  res: http.ServerResponse,
+  dstLang: string,
+  _type: string,
+  stremioId: string
+) {
+  const srcRegistry = 'imdb';
+
+  // Decode percent-encoded colons (Stremio series IDs arrive as tt1234567%3A1%3A1)
+  let srcId = stremioId;
+  try {
+    srcId = decodeURIComponent(srcId);
+  } catch {
+    /* keep original */
+  }
+
+  try {
+    const result = await db.query(
+      `SELECT hash
+       FROM artifacts
+       WHERE src_registry = $1 AND src_id = $2 AND dst_lang = $3
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [srcRegistry, srcId, dstLang]
+    );
+
+    if (result.rows.length > 0) {
+      const hash = result.rows[0].hash as string;
+      const s3Key = `artifacts/${hash}/${hash}.vtt`;
+
+      const signedUrl = await getSignedUrl(
+        s3PresignClient,
+        new GetObjectCommand({ Bucket: S3_BUCKET, Key: s3Key }),
+        { expiresIn: 3600 }
+      );
+
+      console.log(`[addon/sub] Artifact found for ${srcId} (${dstLang}), redirecting to S3`);
+      res.writeHead(302, {
+        location: signedUrl,
+        'cache-control': 'no-cache, no-store, must-revalidate',
+        'access-control-allow-origin': '*',
+      });
+      res.end();
+      return;
+    }
+
+    // No artifact yet — serve placeholder VTT inline.
+    console.log(`[addon/sub] No artifact for ${srcId} (${dstLang}), serving placeholder VTT`);
+    res.writeHead(200, {
+      'content-type': 'text/vtt; charset=utf-8',
+      'cache-control': 'no-cache, no-store, must-revalidate, max-age=0',
+      pragma: 'no-cache',
+      expires: '0',
+      'access-control-allow-origin': '*',
+    });
+    res.end(PLACEHOLDER_VTT);
+  } catch (err) {
+    console.error('[addon/sub] DB query error:', err);
+    // On error, still serve the placeholder so Stremio doesn't break.
+    res.writeHead(200, {
+      'content-type': 'text/vtt; charset=utf-8',
+      'cache-control': 'no-cache, no-store, must-revalidate',
+      'access-control-allow-origin': '*',
+    });
+    res.end(PLACEHOLDER_VTT);
+  }
 }
 
 async function handleAddonRequest(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -255,6 +370,21 @@ async function handleAddonRequest(req: http.IncomingMessage, res: http.ServerRes
 
   if (restPath === '/manifest.json') {
     return sendManifest(res);
+  }
+
+  // ──────────────────────────────────────────────
+  // /sub/:dstLang/:type/:stremioId.vtt — dynamic VTT endpoint
+  // ──────────────────────────────────────────────
+  if (parts[0] === 'sub' && parts.length === 4 && parts[3].endsWith('.vtt')) {
+    const dstLang = parts[1];
+    const type = parts[2];
+    let stremioId = parts[3].slice(0, -4); // strip .vtt
+    try {
+      stremioId = decodeURIComponent(stremioId);
+    } catch {
+      /* keep original */
+    }
+    return handleSubEndpoint(res, dstLang, type, stremioId);
   }
 
   if (parts[0] === 'subtitles') {
@@ -272,15 +402,11 @@ async function handleAddonRequest(req: http.IncomingMessage, res: http.ServerRes
       }
       try {
         const resp = await addonInterface.get('subtitles', type, id, {}, config);
-        // Disable Stremio's internal caching for subtitle responses so
-        // placeholder results are replaced by real subtitles on reload.
         res.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
         return sendJson(res, 200, resp);
       } catch (err: unknown) {
         console.error(err);
-        // Be defensive: Stremio clients can behave poorly on non-200 addon responses.
-        // Always return a valid subtitles payload.
-        return sendJson(res, 200, { subtitles: [] });
+        return sendJson(res, 200, { subtitles: [], ...NO_CACHE });
       }
     }
 
@@ -299,9 +425,7 @@ async function handleAddonRequest(req: http.IncomingMessage, res: http.ServerRes
         return sendJson(res, 200, resp);
       } catch (err: unknown) {
         console.error(err);
-        // Be defensive: Stremio clients can behave poorly on non-200 addon responses.
-        // Always return a valid subtitles payload.
-        return sendJson(res, 200, { subtitles: [] });
+        return sendJson(res, 200, { subtitles: [], ...NO_CACHE });
       }
     }
   }

@@ -115,7 +115,29 @@ function toStremioSubtitleLabel(dstLang: string): string {
       ? displayName
       : dstLang.toUpperCase();
 
-  return `🌐 ${pretty} - GlobalSubs AI`;
+  return `🌐 ${pretty} - GlobalSubs`;
+}
+
+/**
+ * Build a custom lang string that Stremio will display as-is in the subtitle picker,
+ * since it's not a recognized ISO 639-2 code. This is the only reliable way to
+ * brand subtitles in the Stremio UI.
+ */
+function toStremioSubtitleLangBranded(dstLang: string): string {
+  let displayName: string | undefined;
+  try {
+    const dn = new Intl.DisplayNames(['en'], { type: 'language' });
+    displayName = dn.of(dstLang) || undefined;
+  } catch {
+    displayName = undefined;
+  }
+
+  const pretty =
+    displayName && displayName.toLowerCase() !== dstLang.toLowerCase()
+      ? displayName
+      : dstLang.toUpperCase();
+
+  return `${pretty} - GlobalSubs`;
 }
 
 export function getDefaultTranslationModel(): 'gpt-4' | 'gemini-pro' | 'deepl' {
@@ -475,7 +497,7 @@ export async function ensureAddonSubtitle(
         artifactHash: hash,
         subtitles: [
           {
-            lang: toStremioSubtitleLang(dstLang),
+            lang: toStremioSubtitleLangBranded(dstLang),
             label: toStremioSubtitleLabel(dstLang),
             url: signedUrl,
             id: hash,
@@ -642,7 +664,7 @@ export async function ensureAddonSubtitle(
             artifactHash,
             subtitles: [
               {
-                lang: toStremioSubtitleLang(dstLang),
+                lang: toStremioSubtitleLangBranded(dstLang),
                 label: toStremioSubtitleLabel(dstLang),
                 url: signedUrl,
                 id: artifactHash,
@@ -780,7 +802,7 @@ export async function ensureAddonSubtitle(
       });
       return {
         code: 200,
-        body: { status: 'processing', charged, artifactHash, subtitles: [] },
+        body: { status: 'processing', charged, artifactHash, subtitles: [], dstLang },
       };
     } else {
       trace('stage3:en_source_miss', 'No cached English source found');
@@ -881,6 +903,8 @@ export async function ensureAddonSubtitle(
         charged: false,
         artifactHash: null,
         subtitles: [],
+        dstLang,
+        dstLang,
         note: 'Source subtitle is being fetched',
       },
     };

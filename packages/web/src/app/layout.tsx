@@ -11,6 +11,12 @@ export const metadata: Metadata = {
   description: 'Professional AI-powered subtitle translations for movies and series in 100+ languages. Fast, accurate, and affordable.',
   keywords: ['subtitles', 'translation', 'ai', 'multilingual', 'stremio', 'globalsubs'],
   authors: [{ name: 'GlobalSubs' }],
+  icons: {
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/apple-icon',
+  },
   openGraph: {
     title: 'GlobalSubs - AI-Powered Subtitle Translations',
     description: 'Professional subtitle translations in 100+ languages',

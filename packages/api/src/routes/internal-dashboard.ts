@@ -540,7 +540,7 @@ const TOKEN = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('
 
 async function api(path) {
   const res = await fetch(BASE + path, {
-    headers: { 'X-Internal-Token': TOKEN },
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
     credentials: 'include'
   });
   if (!res.ok) throw new Error('HTTP ' + res.status);

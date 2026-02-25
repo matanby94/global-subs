@@ -32,6 +32,12 @@ importers:
 
   packages/addon:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.700.0
+        version: 3.913.0
+      '@aws-sdk/s3-request-presigner':
+        specifier: ^3.700.0
+        version: 3.913.0
       '@stremio-ai-subs/shared':
         specifier: workspace:*
         version: link:../shared
