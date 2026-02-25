@@ -24,7 +24,7 @@ async function main() {
       const head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
       const obj = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
       const text = await (obj.Body as any).transformToString();
-      console.log(`\n=== ${ep} (${hash.slice(0,12)}...) size=${head.ContentLength} ===`);
+      console.log(`\n=== ${ep} (${hash.slice(0, 12)}...) size=${head.ContentLength} ===`);
       console.log(text.slice(0, 400));
       console.log('...');
       console.log(`Last 200 chars: ${text.slice(-200)}`);

@@ -267,7 +267,10 @@ function extractPrefixConfig(pathname: string): {
     return { restPath: rest, config: { addonToken, userId } };
   }
   // Backwards-compatible: /:token/... (opaque token) or /:b64config/... (JSON config)
-  if (parts.length >= 2 && (parts[1] === 'manifest.json' || parts[1] === 'subtitles' || parts[1] === 'sub')) {
+  if (
+    parts.length >= 2 &&
+    (parts[1] === 'manifest.json' || parts[1] === 'subtitles' || parts[1] === 'sub')
+  ) {
     const first = parts[0];
     const rest = '/' + parts.slice(1).join('/');
     // We do NOT JSON-parse opaque tokens here.

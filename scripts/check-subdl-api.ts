@@ -17,10 +17,10 @@ async function main() {
     headers: { accept: 'application/json', 'user-agent': 'GlobalSubs/1.0' },
   });
   const data = await res.json();
-  
+
   const subs = data.subtitles || [];
   console.log(`\nTotal results: ${subs.length}\n`);
-  
+
   for (const [i, sub] of subs.entries()) {
     console.log(`--- Entry ${i} ---`);
     console.log(`  name: ${sub.name}`);
@@ -30,7 +30,10 @@ async function main() {
     console.log(`  full_season: ${sub.full_season}`);
     console.log(`  release_name: ${sub.release_name}`);
     console.log(`  author: ${sub.author}`);
-    if (i >= 9) { console.log('... truncated'); break; }
+    if (i >= 9) {
+      console.log('... truncated');
+      break;
+    }
   }
 }
 

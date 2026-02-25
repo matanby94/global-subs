@@ -218,7 +218,12 @@ export async function findSubdlDownload(params: {
         score += 3;
       } else if (ep === params.episode && (epFrom == null || epEnd == null)) {
         score += 2;
-      } else if (epFrom != null && epEnd != null && epFrom <= params.episode && epEnd >= params.episode) {
+      } else if (
+        epFrom != null &&
+        epEnd != null &&
+        epFrom <= params.episode &&
+        epEnd >= params.episode
+      ) {
         // Multi-episode pack that covers target — lowest priority
         score += 1;
       }
@@ -319,7 +324,9 @@ export async function downloadSubdlSubtitleText(
 
   // If we have a target episode, try to match by season+episode number
   if (targetEpisode != null && subtitleEntries.length > 1) {
-    entry = subtitleEntries.find((e: ZipEntry) => entryMatchesEpisode(e.entryName, targetEpisode, targetSeason));
+    entry = subtitleEntries.find((e: ZipEntry) =>
+      entryMatchesEpisode(e.entryName, targetEpisode, targetSeason)
+    );
     if (debug && entry) {
       console.log('[subdl] matched episode', {
         season: targetSeason,
