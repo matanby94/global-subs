@@ -88,3 +88,187 @@ html {
   background-color: rgba(124, 58, 237, 0.2);
   color: #4c1d95;
 }
+
+/* ── CSS animations replacing framer-motion for above-fold content ── */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 20px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes fadeInLeft {
+  from {
+    opacity: 0;
+    transform: translate3d(-20px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes fadeInRight {
+  from {
+    opacity: 0;
+    transform: translate3d(20px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale3d(0.85, 0.85, 1);
+  }
+  to {
+    opacity: 1;
+    transform: scale3d(1, 1, 1);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-in-left {
+  animation: fadeInLeft 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-in-right {
+  animation: fadeInRight 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-in-scale {
+  animation: fadeInScale 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.3s both;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fadeIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Component-specific animations ── */
+
+/* ParticleField: floating particles with unique paths via CSS custom properties */
+@keyframes particleFloat {
+  0%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(var(--float-dx, 10px), var(--float-dy, -15px), 0);
+  }
+}
+.animate-particle-float {
+  animation: particleFloat 6s ease-in-out infinite;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* SubtitleWaveform: bar height oscillation */
+@keyframes waveBar {
+  0%, 100% {
+    transform: scaleY(0.4);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+.animate-wave-bar {
+  animation: waveBar 1.2s ease-in-out infinite;
+  transform-origin: bottom;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+
+/* LanguageOrbit: rotation */
+@keyframes orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-orbit {
+  animation: orbit 20s linear infinite;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+@keyframes orbitReverse {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+.animate-orbit-reverse {
+  animation: orbitReverse 20s linear infinite;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* LanguageOrbit: hub pulse */
+@keyframes hubPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+.animate-hub-pulse {
+  animation: hubPulse 3s ease-in-out infinite;
+}
+
+/* GlobeNetwork: node pulse */
+@keyframes nodePulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.15;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.35;
+  }
+}
+.animate-node-pulse {
+  animation: nodePulse 3s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* TranslationPipeline: arrow bounce */
+@keyframes arrowPulse {
+  0%, 100% { transform: translateY(0); opacity: 0.7; }
+  50% { transform: translateY(2px); opacity: 1; }
+}
+.animate-arrow-pulse {
+  animation: arrowPulse 0.8s ease-in-out infinite;
+}
+
+/* Reduced motion: disable non-essential animations */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in-up,
+  .animate-fade-in-left,
+  .animate-fade-in-right,
+  .animate-fade-in-scale,
+  .animate-fade-in,
+  .animate-particle-float,
+  .animate-wave-bar,
+  .animate-orbit,
+  .animate-orbit-reverse,
+  .animate-hub-pulse,
+  .animate-node-pulse,
+  .animate-arrow-pulse {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .animate-pulse {
+    animation: none !important;
+  }
+}

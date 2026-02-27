@@ -13,7 +13,7 @@ const nextConfig = {
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
   experimental: {
-    optimizePackageImports: ['axios'],
+    optimizePackageImports: ['framer-motion', 'axios'],
   },
   // Modern JavaScript - target modern browsers
   transpilePackages: [],

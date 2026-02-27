@@ -1,7 +1,6 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 interface LanguageNode {
     id: string;
@@ -15,7 +14,6 @@ interface LanguageNode {
 interface Connection {
     from: string;
     to: string;
-    delay: number;
 }
 
 const LANGUAGES: LanguageNode[] = [
@@ -34,22 +32,22 @@ const LANGUAGES: LanguageNode[] = [
 ];
 
 const CONNECTIONS: Connection[] = [
-    { from: 'en', to: 'es', delay: 0.5 },
-    { from: 'en', to: 'fr', delay: 0.8 },
-    { from: 'en', to: 'de', delay: 1.1 },
-    { from: 'en', to: 'ja', delay: 1.4 },
-    { from: 'en', to: 'zh', delay: 0.6 },
-    { from: 'en', to: 'ar', delay: 1.7 },
-    { from: 'en', to: 'pt', delay: 1.0 },
-    { from: 'en', to: 'ru', delay: 1.3 },
-    { from: 'en', to: 'ko', delay: 1.6 },
-    { from: 'en', to: 'hi', delay: 0.9 },
-    { from: 'en', to: 'it', delay: 1.2 },
-    { from: 'es', to: 'pt', delay: 2.0 },
-    { from: 'fr', to: 'it', delay: 2.2 },
-    { from: 'zh', to: 'ja', delay: 2.4 },
-    { from: 'ja', to: 'ko', delay: 2.6 },
-    { from: 'de', to: 'ru', delay: 2.1 },
+    { from: 'en', to: 'es' },
+    { from: 'en', to: 'fr' },
+    { from: 'en', to: 'de' },
+    { from: 'en', to: 'ja' },
+    { from: 'en', to: 'zh' },
+    { from: 'en', to: 'ar' },
+    { from: 'en', to: 'pt' },
+    { from: 'en', to: 'ru' },
+    { from: 'en', to: 'ko' },
+    { from: 'en', to: 'hi' },
+    { from: 'en', to: 'it' },
+    { from: 'es', to: 'pt' },
+    { from: 'fr', to: 'it' },
+    { from: 'zh', to: 'ja' },
+    { from: 'ja', to: 'ko' },
+    { from: 'de', to: 'ru' },
 ];
 
 function getNode(id: string) {
@@ -57,18 +55,50 @@ function getNode(id: string) {
 }
 
 export default function GlobeNetwork() {
-    const [activeConnection, setActiveConnection] = useState(0);
+    const [active, setActive] = useState(0);
+    const [packetProgress, setPacketProgress] = useState(0);
+    const rafRef = useRef<number>(0);
 
     useEffect(() => {
-        const timer = setInterval(() => {
-            setActiveConnection((prev) => (prev + 1) % CONNECTIONS.length);
-        }, 2000);
-        return () => clearInterval(timer);
+        let startTime: number | null = null;
+        const PACKET_DURATION = 1800; // ms
+        const PAUSE_DURATION = 200; // ms between packets
+
+        const animate = (timestamp: number) => {
+            if (!startTime) startTime = timestamp;
+            const elapsed = timestamp - startTime;
+            const totalCycle = PACKET_DURATION + PAUSE_DURATION;
+            const cycleElapsed = elapsed % totalCycle;
+
+            if (cycleElapsed < PACKET_DURATION) {
+                // Ease-out cubic for smooth deceleration
+                const raw = cycleElapsed / PACKET_DURATION;
+                setPacketProgress(1 - Math.pow(1 - raw, 2));
+            } else {
+                setPacketProgress(0);
+            }
+
+            // Advance to next connection each full cycle
+            const currentCycle = Math.floor(elapsed / totalCycle);
+            setActive(currentCycle % CONNECTIONS.length);
+
+            rafRef.current = requestAnimationFrame(animate);
+        };
+
+        rafRef.current = requestAnimationFrame(animate);
+        return () => cancelAnimationFrame(rafRef.current);
     }, []);
+
+    const conn = CONNECTIONS[active];
+    const from = getNode(conn.from);
+    const to = getNode(conn.to);
+
+    const packetX = from.x + (to.x - from.x) * packetProgress;
+    const packetY = from.y + (to.y - from.y) * packetProgress;
+    const packetOpacity = packetProgress > 0 ? Math.sin(packetProgress * Math.PI) : 0;
 
     return (
         <div className="relative w-full max-w-2xl mx-auto aspect-square">
-            {/* Glow background */}
             <div className="absolute inset-0 rounded-full bg-gradient-radial from-purple-500/10 via-transparent to-transparent" />
 
             <svg viewBox="0 0 100 100" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -85,94 +115,54 @@ export default function GlobeNetwork() {
                             <feMergeNode in="SourceGraphic" />
                         </feMerge>
                     </filter>
-                    <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#7c3aed" stopOpacity="0.6" />
-                        <stop offset="50%" stopColor="#a855f7" stopOpacity="0.8" />
-                        <stop offset="100%" stopColor="#7c3aed" stopOpacity="0.6" />
-                    </linearGradient>
                 </defs>
 
-                {/* Background globe circle */}
+                {/* Globe background */}
                 <circle cx="50" cy="50" r="42" fill="url(#globeGrad)" stroke="#7c3aed" strokeWidth="0.3" strokeOpacity="0.2" />
                 <ellipse cx="50" cy="50" rx="42" ry="16" fill="none" stroke="#7c3aed" strokeWidth="0.2" strokeOpacity="0.15" />
                 <ellipse cx="50" cy="50" rx="16" ry="42" fill="none" stroke="#7c3aed" strokeWidth="0.2" strokeOpacity="0.15" />
                 <ellipse cx="50" cy="50" rx="30" ry="42" fill="none" stroke="#7c3aed" strokeWidth="0.15" strokeOpacity="0.1" />
 
                 {/* Connection lines */}
-                {CONNECTIONS.map((conn, i) => {
-                    const from = getNode(conn.from);
-                    const to = getNode(conn.to);
-                    const isActive = i === activeConnection;
+                {CONNECTIONS.map((c, i) => {
+                    const f = getNode(c.from);
+                    const t = getNode(c.to);
+                    const isActive = i === active;
                     return (
-                        <motion.line
-                            key={`${conn.from}-${conn.to}`}
-                            x1={from.x}
-                            y1={from.y}
-                            x2={to.x}
-                            y2={to.y}
+                        <line
+                            key={`${c.from}-${c.to}`}
+                            x1={f.x} y1={f.y} x2={t.x} y2={t.y}
                             stroke={isActive ? '#a855f7' : '#7c3aed'}
                             strokeWidth={isActive ? 0.6 : 0.3}
                             strokeOpacity={isActive ? 0.8 : 0.15}
-                            initial={{ pathLength: 0 }}
-                            animate={{
-                                pathLength: 1,
-                                strokeOpacity: isActive ? [0.15, 0.8, 0.15] : 0.15,
-                            }}
-                            transition={{
-                                pathLength: { duration: 1.5, delay: conn.delay },
-                                strokeOpacity: isActive
-                                    ? { duration: 2, repeat: 0 }
-                                    : { duration: 0 },
-                            }}
+                            className={isActive ? 'transition-all duration-500' : ''}
                         />
                     );
                 })}
 
-                {/* Animated data packet along active connection */}
-                {(() => {
-                    const conn = CONNECTIONS[activeConnection];
-                    const from = getNode(conn.from);
-                    const to = getNode(conn.to);
-                    return (
-                        <motion.circle
-                            r="0.8"
-                            fill="#a855f7"
-                            filter="url(#nodeGlow)"
-                            initial={{ cx: from.x, cy: from.y, opacity: 0 }}
-                            animate={{
-                                cx: [from.x, to.x],
-                                cy: [from.y, to.y],
-                                opacity: [0, 1, 1, 0],
-                            }}
-                            transition={{ duration: 1.5, ease: 'easeInOut' }}
-                            key={`packet-${activeConnection}`}
-                        />
-                    );
-                })()}
+                {/* Animated data packet along active connection — rAF-driven */}
+                {packetOpacity > 0 && (
+                    <circle
+                        cx={packetX}
+                        cy={packetY}
+                        r="1.2"
+                        fill="#c084fc"
+                        opacity={packetOpacity}
+                        filter="url(#nodeGlow)"
+                    />
+                )}
 
                 {/* Language nodes */}
                 {LANGUAGES.map((lang) => (
-                    <motion.g
-                        key={lang.id}
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        transition={{ duration: 0.5, delay: lang.delay }}
-                    >
-                        <motion.circle
+                    <g key={lang.id} className="animate-fade-in-up" style={{ animationDelay: `${lang.delay}s` }}>
+                        <circle
                             cx={lang.x}
                             cy={lang.y}
                             r={lang.size / 8}
                             fill="#7c3aed"
                             fillOpacity="0.15"
-                            animate={{
-                                r: [lang.size / 8, lang.size / 6, lang.size / 8],
-                            }}
-                            transition={{
-                                duration: 3,
-                                repeat: Infinity,
-                                delay: lang.delay,
-                                ease: 'easeInOut',
-                            }}
+                            className="animate-node-pulse"
+                            style={{ animationDelay: `${lang.delay}s` }}
                         />
                         <circle
                             cx={lang.x}
@@ -183,16 +173,16 @@ export default function GlobeNetwork() {
                         />
                         <text
                             x={lang.x}
-                            y={lang.y - lang.size / 7}
+                            y={lang.y - lang.size / 6}
                             textAnchor="middle"
                             fill="#6b21a8"
-                            fontSize="2.5"
+                            fontSize="3.5"
                             fontWeight="700"
                             fontFamily="system-ui, sans-serif"
                         >
                             {lang.label}
                         </text>
-                    </motion.g>
+                    </g>
                 ))}
             </svg>
         </div>

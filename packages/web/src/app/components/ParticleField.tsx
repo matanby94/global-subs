@@ -1,55 +1,38 @@
-'use client';
-
-import { motion } from 'framer-motion';
-import { useMemo } from 'react';
-
-interface Particle {
-    id: number;
-    x: number;
-    y: number;
-    size: number;
-    duration: number;
-    delay: number;
-    opacity: number;
+/* Deterministic pseudo-random so SSR output matches client hydration */
+function seededRandom(seed: number): number {
+    const x = Math.sin(seed * 9301 + 49297) * 49297;
+    return x - Math.floor(x);
 }
 
 export default function ParticleField({ count = 30 }: { count?: number }) {
-    const particles = useMemo<Particle[]>(() => {
-        return Array.from({ length: count }, (_, i) => ({
-            id: i,
-            x: Math.random() * 100,
-            y: Math.random() * 100,
-            size: Math.random() * 4 + 1,
-            duration: Math.random() * 15 + 10,
-            delay: Math.random() * 5,
-            opacity: Math.random() * 0.3 + 0.05,
-        }));
-    }, [count]);
+    const particles = Array.from({ length: count }, (_, i) => ({
+        x: seededRandom(i * 7 + 1) * 100,
+        y: seededRandom(i * 7 + 2) * 100,
+        size: seededRandom(i * 7 + 3) * 4 + 1,
+        duration: seededRandom(i * 7 + 4) * 15 + 10,
+        delay: seededRandom(i * 7 + 5) * 5,
+        opacity: seededRandom(i * 7 + 6) * 0.3 + 0.05,
+        dx: (seededRandom(i * 7 + 7) - 0.5) * 40,
+        dy: (seededRandom(i * 7 + 8) - 0.5) * 40,
+    }));
 
     return (
         <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
-            {particles.map((p) => (
-                <motion.div
-                    key={p.id}
-                    className="absolute rounded-full bg-purple-400"
+            {particles.map((p, i) => (
+                <div
+                    key={i}
+                    className="absolute rounded-full bg-purple-400 animate-particle-float"
                     style={{
                         left: `${p.x}%`,
                         top: `${p.y}%`,
                         width: p.size,
                         height: p.size,
                         opacity: p.opacity,
-                    }}
-                    animate={{
-                        y: [0, -30, 0, 20, 0],
-                        x: [0, 15, -10, 5, 0],
-                        opacity: [p.opacity, p.opacity * 2, p.opacity, p.opacity * 1.5, p.opacity],
-                    }}
-                    transition={{
-                        duration: p.duration,
-                        delay: p.delay,
-                        repeat: Infinity,
-                        ease: 'easeInOut',
-                    }}
+                        animationDuration: `${p.duration}s`,
+                        animationDelay: `${p.delay}s`,
+                        '--float-dx': `${p.dx}px`,
+                        '--float-dy': `${p.dy}px`,
+                    } as React.CSSProperties}
                 />
             ))}
         </div>

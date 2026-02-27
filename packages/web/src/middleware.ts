@@ -24,14 +24,13 @@ export function middleware(_request: NextRequest) {
   // Allow Google Sign-In popup to communicate back via postMessage
   response.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
 
-  // Content Security Policy
-  response.headers.set(
-    'Content-Security-Policy',
-    `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://accounts.google.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; frame-src https://accounts.google.com; connect-src 'self' ${apiOrigin} https://accounts.google.com`
-  );
-
-  // HSTS - only in production
+  // Content Security Policy — only set in production; dev needs 'unsafe-eval' for
+  // Next.js hot-reload which Lighthouse penalises, so skip it entirely during dev.
   if (process.env.NODE_ENV === 'production') {
+    response.headers.set(
+      'Content-Security-Policy',
+      `default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://accounts.google.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; frame-src https://accounts.google.com; connect-src 'self' ${apiOrigin} https://accounts.google.com`
+    );
     response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
 

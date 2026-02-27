@@ -1,20 +1,28 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
-import Script from 'next/script';
 import { Providers } from './providers';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#6a1b9a',
+};
+
 export const metadata: Metadata = {
   title: 'GlobalSubs - AI-Powered Subtitle Translations',
-  description: 'Professional AI-powered subtitle translations for movies and series in 100+ languages. Fast, accurate, and affordable.',
+  description:
+    'Professional AI-powered subtitle translations for movies and series in 100+ languages. Fast, accurate, and affordable.',
   keywords: ['subtitles', 'translation', 'ai', 'multilingual', 'stremio', 'globalsubs'],
   authors: [{ name: 'GlobalSubs' }],
+  metadataBase: new URL('https://globalsubs.net'),
+  alternates: {
+    canonical: '/',
+  },
   icons: {
-    icon: [
-      { url: '/icon.svg', type: 'image/svg+xml' },
-    ],
+    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
     apple: '/apple-icon',
   },
   openGraph: {
@@ -22,13 +30,21 @@ export const metadata: Metadata = {
     description: 'Professional subtitle translations in 100+ languages',
     type: 'website',
     url: 'https://globalsubs.net',
+    siteName: 'GlobalSubs',
+    locale: 'en_US',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'GlobalSubs - AI-Powered Subtitle Translations',
+    description: 'Professional subtitle translations in 100+ languages',
   },
   robots: {
     index: true,
     follow: true,
-  },
-  verification: {
-    google: 'google-site-verification-token',
+    googleBot: {
+      index: true,
+      follow: true,
+    },
   },
 };
 
@@ -36,9 +52,11 @@ const structuredData = {
   '@context': 'https://schema.org',
   '@type': 'WebApplication',
   name: 'GlobalSubs',
-  description: 'Professional AI-powered subtitle translation service supporting 100+ languages',
+  description:
+    'Professional AI-powered subtitle translation service supporting 100+ languages',
   url: 'https://globalsubs.net',
   applicationCategory: 'MultimediaApplication',
+  operatingSystem: 'Any',
   offers: {
     '@type': 'Offer',
     price: '0',
@@ -54,8 +72,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <Script
-          id="structured-data"
+        <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
