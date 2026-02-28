@@ -1,6 +1,8 @@
 # Architecture Overview
 
 For a package-by-package connectivity map and sequence diagrams, see [PACKAGE_COMMUNICATION.md](./PACKAGE_COMMUNICATION.md).
+For deployment and CI/CD details, see [DEPLOYMENT.md](./DEPLOYMENT.md).
+For server and infrastructure details, see [INFRASTRUCTURE.md](./INFRASTRUCTURE.md).
 
 ## System Design
 

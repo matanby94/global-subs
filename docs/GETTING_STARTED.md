@@ -129,6 +129,14 @@ See [docs/](./docs) for:
 - **Testing**: Playwright, Axe
 - **CI/CD**: GitHub Actions
 
-## 📝 License
+## � Further Reading
+
+- [Architecture Overview](./ARCHITECTURE.md)
+- [Deployment Guide](./DEPLOYMENT.md)
+- [Server Infrastructure](./INFRASTRUCTURE.md)
+- [Package Communication](./PACKAGE_COMMUNICATION.md)
+- [Lighthouse Optimization](./LIGHTHOUSE_OPTIMIZATION.md)
+
+## �📝 License
 
 MIT
