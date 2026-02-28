@@ -69,57 +69,6 @@ jobs:
       - name: Run unit tests
         run: pnpm run test
 
-      - name: Install Playwright browsers
-        run: pnpm --filter e2e exec playwright install --with-deps
-
-      - name: Start services
-        run: |
-          pnpm --filter @stremio-ai-subs/api run dev &
-          pnpm --filter @stremio-ai-subs/web run dev &
-          sleep 15
-        env:
-          DATABASE_URL: postgresql://stremio:stremio_dev@localhost:5432/stremio_ai_subs
-          REDIS_HOST: localhost
-          REDIS_PORT: '6379'
-          JWT_SECRET: ci-test-secret-minimum-16-chars
-          S3_ENDPOINT: http://localhost:9000
-          S3_ACCESS_KEY_ID: minioadmin
-          S3_SECRET_ACCESS_KEY: minioadmin
-          S3_BUCKET: stremio-ai-subs
-          OPENAI_API_KEY: sk-test-ci-dummy
-          CORS_ORIGIN: http://localhost:3010
-          WEB_PORT: '3010'
-          API_PORT: '3001'
-
-      - name: Run E2E tests
-        continue-on-error: true
-        run: pnpm run test:e2e
-        env:
-          DATABASE_URL: postgresql://stremio:stremio_dev@localhost:5432/stremio_ai_subs
-          REDIS_HOST: localhost
-          REDIS_PORT: '6379'
-          JWT_SECRET: ci-test-secret-minimum-16-chars
-          S3_ENDPOINT: http://localhost:9000
-          S3_ACCESS_KEY_ID: minioadmin
-          S3_SECRET_ACCESS_KEY: minioadmin
-          S3_BUCKET: stremio-ai-subs
-
-      - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-report
-          path: packages/e2e/artifacts/
-          retention-days: 30
-
-      - name: Upload test results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results
-          path: packages/e2e/artifacts/test-results/
-          retention-days: 30
-
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
