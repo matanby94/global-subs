@@ -87,7 +87,9 @@ jobs:
           S3_SECRET_ACCESS_KEY: minioadmin
           S3_BUCKET: stremio-ai-subs
           OPENAI_API_KEY: sk-test-ci-dummy
-          CORS_ORIGIN: http://localhost:3000
+          CORS_ORIGIN: http://localhost:3010
+          WEB_PORT: '3010'
+          API_PORT: '3001'
 
       - name: Run E2E tests
         run: pnpm run test:e2e
