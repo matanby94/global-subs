@@ -60,6 +60,7 @@ services:
       - '${API_PORT:-3001}:3001'
     environment:
       NODE_ENV: production
+      API_PORT: '3001'
       DATABASE_URL: postgresql://${POSTGRES_USER:-stremio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stremio_ai_subs}
       REDIS_HOST: redis
       REDIS_PORT: '6379'
