@@ -802,7 +802,7 @@ export async function ensureAddonSubtitle(
       });
       return {
         code: 200,
-        body: { status: 'processing', charged, artifactHash, subtitles: [], dstLang },
+        body: { status: 'processing', charged, artifactHash, subtitles: [] },
       };
     } else {
       trace('stage3:en_source_miss', 'No cached English source found');
@@ -903,8 +903,6 @@ export async function ensureAddonSubtitle(
         charged: false,
         artifactHash: null,
         subtitles: [],
-        dstLang,
-        dstLang,
         note: 'Source subtitle is being fetched',
       },
     };
