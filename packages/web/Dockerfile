@@ -35,6 +35,9 @@ ENV NEXT_PUBLIC_ADDON_MANIFEST_URL=${NEXT_PUBLIC_ADDON_MANIFEST_URL}
 
 RUN pnpm --filter @stremio-ai-subs/web build
 
+# Ensure public dir exists (may be empty)
+RUN mkdir -p /app/packages/web/public
+
 # ── Stage 3: Production image ────────────────────────────
 FROM node:20-alpine AS production
 
