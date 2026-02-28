@@ -6,7 +6,7 @@
 
 # ── Stage 1: Install dependencies ────────────────────────
 FROM node:20-alpine AS deps
-RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+RUN npm install -g pnpm@8.15.0
 WORKDIR /app
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.json ./
@@ -27,7 +27,7 @@ RUN pnpm --filter @stremio-ai-subs/shared build && \
 
 # ── Stage 3: Production image ────────────────────────────
 FROM node:20-alpine AS production
-RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+RUN npm install -g pnpm@8.15.0
 
 RUN addgroup -g 1001 -S appgroup && \
     adduser -S appuser -u 1001 -G appgroup

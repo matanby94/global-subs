@@ -6,7 +6,7 @@
 
 # ── Stage 1: Install dependencies ────────────────────────
 FROM node:20-alpine AS deps
-RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+RUN npm install -g pnpm@8.15.0
 WORKDIR /app
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.json ./
@@ -28,7 +28,7 @@ RUN pnpm --filter @stremio-ai-subs/shared build && \
 # ── Stage 3: Production image ────────────────────────────
 # Use full node image (not alpine) because scrapers may need Playwright/Chromium
 FROM node:20-slim AS production
-RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+RUN npm install -g pnpm@8.15.0
 
 # Install Playwright system dependencies for headless browser support
 RUN apt-get update && \
