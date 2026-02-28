@@ -133,12 +133,11 @@ jobs:
           host: 178.104.8.231
           username: ${{ secrets.GLOBAL_SUBS_DEPLOY_USER }}
           key: ${{ secrets.GLOBAL_SUBS_DEPLOY_SSH_KEY }}
-          port: ${{ secrets.GLOBAL_SUBS_DEPLOY_SSH_PORT || 22 }}
-          script_stop: true
+          port: 22
           command_timeout: 10m
           script: |
             set -euo pipefail
-            APP_DIR="${{ secrets.GLOBAL_SUBS_DEPLOY_APP_DIR || '/opt/globalsubs' }}"
+            APP_DIR="/app"
             cd "$APP_DIR"
 
             echo "==> Deploying GlobalSubs at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
