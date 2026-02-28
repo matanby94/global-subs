@@ -71,7 +71,7 @@ export function validateWebVTT(content: string): {
   while (i < lines.length) {
     const line = lines[i].trim();
     const timingMatch = line.match(
-      /^(\d{1,2}:\d{2}:\d{2}[\.]\d{3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[\.]\d{3})/
+      /^(\d{1,2}:\d{2}:\d{2}[.]\d{3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[.]\d{3})/
     );
     if (timingMatch) {
       const startMs = parseVttTimestamp(timingMatch[1]);
@@ -269,7 +269,7 @@ export function detectSubtitleFormat(input: string): SubtitleFormat {
   }
 
   // Generic timing line (SRT or VTT without header)
-  if (/\b\d{1,2}:\d{2}:\d{2}[\.,]\d{3}\s*-->\s*\d{1,2}:\d{2}:\d{2}[\.,]\d{3}\b/.test(text)) {
+  if (/\b\d{1,2}:\d{2}:\d{2}[.,]\d{3}\s*-->\s*\d{1,2}:\d{2}:\d{2}[.,]\d{3}\b/.test(text)) {
     // Ambiguous: could be VTT missing header or SRT with dot ms.
     // Prefer SRT behavior (we'll emit a proper WEBVTT header anyway).
     return 'srt';
@@ -295,7 +295,7 @@ function srtTimeToVtt(time: string): string {
 
 function assTimeToVtt(time: string): string {
   // ASS: H:MM:SS.cc (centiseconds)
-  const m = time.trim().match(/^(\d+):(\d{1,2}):(\d{1,2})[\.:](\d{1,3})$/);
+  const m = time.trim().match(/^(\d+):(\d{1,2}):(\d{1,2})[.:](\d{1,3})$/);
   if (!m) return time.trim();
   const hours = parseInt(m[1], 10);
   const minutes = parseInt(m[2], 10);
@@ -331,7 +331,7 @@ function convertSrtToVtt(input: string): { vtt: string; warnings: string[] } {
     if (i >= lines.length) break;
     const timingLine = lines[i].trim();
     const timingMatch = timingLine.match(
-      /^(\d{1,2}:\d{2}:\d{2}[\.,]\d{3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[\.,]\d{3})(.*)$/
+      /^(\d{1,2}:\d{2}:\d{2}[.,]\d{3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[.,]\d{3})(.*)$/
     );
 
     if (!timingMatch) {

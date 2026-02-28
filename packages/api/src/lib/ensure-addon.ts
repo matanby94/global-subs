@@ -96,11 +96,6 @@ export type EnsureAddonEnsureResponse = {
 /** Negative cache TTL: don't re-scrape content marked not_found for this duration. */
 const NEGATIVE_CACHE_TTL_MS = 24 * 60 * 60_000; // 24 hours
 
-function toStremioSubtitleLang(dstLang: string): string {
-  if (dstLang === 'he') return 'heb';
-  return dstLang;
-}
-
 function toStremioSubtitleLabel(dstLang: string): string {
   let displayName: string | undefined;
   try {

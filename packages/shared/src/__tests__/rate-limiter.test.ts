@@ -10,7 +10,6 @@ import {
 
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
 const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379', 10);
-const TEST_PREFIX = 'ratelimit:provider:__test_';
 const TEST_PROVIDER = '__test_provider';
 
 let redis: Redis;
