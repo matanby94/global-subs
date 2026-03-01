@@ -17,6 +17,8 @@ import { internalAddonRoutes } from './routes/internal-addon';
 import { internalQueuesRoutes } from './routes/internal-queues';
 import { internalMonitoringRoutes } from './routes/internal-monitoring';
 import { internalDashboardRoutes } from './routes/internal-dashboard';
+import { webhookRoutes } from './routes/webhooks';
+import { paypalWebhookRoutes } from './routes/paypal-webhooks';
 import { db } from './db';
 import { s3Client, BUCKET_NAME } from './storage';
 import { redisConnection } from './queue';
@@ -127,8 +129,14 @@ async function buildServer() {
     process.env.WEB_URL ||
     (process.env.WEB_PORT ? `http://localhost:${process.env.WEB_PORT}` : 'http://localhost:3010');
 
+  const corsOriginRaw = process.env.CORS_ORIGIN || defaultCorsOrigin;
+  // Support comma-separated origins so both localhost and LAN IP work
+  const corsOrigin = corsOriginRaw.includes(',')
+    ? corsOriginRaw.split(',').map((o) => o.trim())
+    : corsOriginRaw;
+
   await fastify.register(cors, {
-    origin: process.env.CORS_ORIGIN || defaultCorsOrigin,
+    origin: corsOrigin,
     credentials: true,
   });
 
@@ -277,6 +285,8 @@ async function buildServer() {
   await fastify.register(internalQueuesRoutes, { prefix: '/api/internal/queues' });
   await fastify.register(internalMonitoringRoutes, { prefix: '/api/internal/monitoring' });
   await fastify.register(internalDashboardRoutes, { prefix: '/api/internal/dashboard' });
+  await fastify.register(webhookRoutes, { prefix: '/api/webhooks/stripe' });
+  await fastify.register(paypalWebhookRoutes, { prefix: '/api/webhooks/paypal' });
 
   return fastify;
 }

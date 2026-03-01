@@ -196,6 +196,15 @@ async function chargeAddonOncePerLibraryKey(
   params: { userId: string; libraryKey: string }
 ) {
   const creditsToCharge = 1;
+
+  // Subscription users bypass credit charging entirely
+  const subResult = await fastify.db.query(
+    `SELECT id FROM subscriptions
+     WHERE user_id = $1 AND status = 'active' AND current_period_end > NOW()`,
+    [params.userId]
+  );
+  const isSubscriber = subResult.rows.length > 0;
+
   const client = await fastify.db.connect();
   try {
     await client.query('BEGIN');
@@ -218,18 +227,33 @@ async function chargeAddonOncePerLibraryKey(
     if (walletResult.rows.length === 0) throw new Error('Wallet not found');
 
     const wallet = walletResult.rows[0];
-    const currentBalance = parseFloat(wallet.balance_credits);
-    if (currentBalance < creditsToCharge) throw new Error('Insufficient credits');
 
-    await client.query('UPDATE wallets SET balance_credits = balance_credits - $1 WHERE id = $2', [
-      creditsToCharge,
-      wallet.id,
-    ]);
+    if (isSubscriber) {
+      // Subscriber: log zero-cost audit transaction, skip wallet debit
+      await client.query(
+        'INSERT INTO credit_transactions (user_id, wallet_id, delta, reason, reference) VALUES ($1, $2, $3, $4, $5)',
+        [
+          params.userId,
+          wallet.id,
+          0,
+          'Addon subscription translation (unlimited)',
+          params.libraryKey,
+        ]
+      );
+    } else {
+      const currentBalance = parseFloat(wallet.balance_credits);
+      if (currentBalance < creditsToCharge) throw new Error('Insufficient credits');
 
-    await client.query(
-      'INSERT INTO credit_transactions (user_id, wallet_id, delta, reason, reference) VALUES ($1, $2, $3, $4, $5)',
-      [params.userId, wallet.id, -creditsToCharge, 'Addon translation', params.libraryKey]
-    );
+      await client.query(
+        'UPDATE wallets SET balance_credits = balance_credits - $1 WHERE id = $2',
+        [creditsToCharge, wallet.id]
+      );
+
+      await client.query(
+        'INSERT INTO credit_transactions (user_id, wallet_id, delta, reason, reference) VALUES ($1, $2, $3, $4, $5)',
+        [params.userId, wallet.id, -creditsToCharge, 'Addon translation', params.libraryKey]
+      );
+    }
 
     await client.query('COMMIT');
     return true;

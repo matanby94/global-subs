@@ -26,7 +26,17 @@ export const TopUpCreditsSchema = z.object({
 });
 
 export const PurchaseBundleSchema = z.object({
-  bundle: z.enum(['starter', 'pro']),
+  bundle: z.enum(['pack50', 'pack100']),
+  paymentMethod: z.enum(['stripe', 'paypal']).default('stripe'),
+});
+
+export const CreateSubscriptionSchema = z.object({
+  plan: z.enum(['unlimited']).default('unlimited'),
+  paymentMethod: z.enum(['stripe', 'paypal']).default('stripe'),
+});
+
+export const CancelSubscriptionSchema = z.object({
+  cancelAtPeriodEnd: z.boolean().default(true),
 });
 
 export const TranslateSubtitleSchema = z.object({

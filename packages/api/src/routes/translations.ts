@@ -4,6 +4,7 @@ import { TranslateSubtitleSchema } from '@stremio-ai-subs/shared';
 import { generateArtifactHash } from '@stremio-ai-subs/shared';
 import { AppError } from '../lib/app-error';
 import { ingestQueue } from '../queue';
+import { hasActiveSubscription } from './credits';
 
 // Models that actually have working adapters
 const SUPPORTED_MODELS = new Set(['gpt-4']);
@@ -67,41 +68,56 @@ export async function translationsRoutes(fastify: FastifyInstance) {
       signedUrl = `/api/translations/status/${artifactHash}`;
     }
 
-    // Charge 1 credit per translation (bundle-based pricing model)
-    const creditsToCharge = 1;
+    // ── Charging: subscription users bypass credits, others pay 1 credit ──
+    const isSubscriber = await hasActiveSubscription(fastify, user.userId);
+    const creditsToCharge = isSubscriber ? 0 : 1;
 
     // Check and debit credits in a transaction
     const client = await fastify.db.connect();
     try {
       await client.query('BEGIN');
 
-      const walletResult = await client.query(
-        'SELECT id, balance_credits FROM wallets WHERE user_id = $1 FOR UPDATE',
-        [user.userId]
-      );
+      if (!isSubscriber) {
+        const walletResult = await client.query(
+          'SELECT id, balance_credits FROM wallets WHERE user_id = $1 FOR UPDATE',
+          [user.userId]
+        );
 
-      if (walletResult.rows.length === 0) {
-        throw AppError.notFound('Wallet not found');
+        if (walletResult.rows.length === 0) {
+          throw AppError.notFound('Wallet not found');
+        }
+
+        const wallet = walletResult.rows[0];
+        const currentBalance = parseFloat(wallet.balance_credits);
+
+        if (currentBalance < 1) {
+          throw AppError.insufficientCredits(currentBalance);
+        }
+
+        // Debit credits
+        await client.query(
+          'UPDATE wallets SET balance_credits = balance_credits - $1 WHERE id = $2',
+          [1, wallet.id]
+        );
+
+        // Record transaction
+        await client.query(
+          'INSERT INTO credit_transactions (user_id, wallet_id, delta, reason, reference) VALUES ($1, $2, $3, $4, $5)',
+          [user.userId, wallet.id, -1, 'Translation request', artifactHash]
+        );
+      } else {
+        // Subscriber: log zero-cost transaction for audit trail
+        const walletResult = await client.query(
+          'SELECT id FROM wallets WHERE user_id = $1',
+          [user.userId]
+        );
+        if (walletResult.rows.length > 0) {
+          await client.query(
+            'INSERT INTO credit_transactions (user_id, wallet_id, delta, reason, reference) VALUES ($1, $2, $3, $4, $5)',
+            [user.userId, walletResult.rows[0].id, 0, 'Subscription translation (unlimited)', artifactHash]
+          );
+        }
       }
-
-      const wallet = walletResult.rows[0];
-      const currentBalance = parseFloat(wallet.balance_credits);
-
-      if (currentBalance < creditsToCharge) {
-        throw AppError.insufficientCredits(currentBalance);
-      }
-
-      // Debit credits
-      await client.query(
-        'UPDATE wallets SET balance_credits = balance_credits - $1 WHERE id = $2',
-        [creditsToCharge, wallet.id]
-      );
-
-      // Record transaction
-      await client.query(
-        'INSERT INTO credit_transactions (user_id, wallet_id, delta, reason, reference) VALUES ($1, $2, $3, $4, $5)',
-        [user.userId, wallet.id, -creditsToCharge, 'Translation request', artifactHash]
-      );
 
       // Record serve event for cache hits
       if (cached) {

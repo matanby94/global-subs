@@ -4,14 +4,14 @@ Production infrastructure running on Hetzner Cloud.
 
 ## Server Specifications
 
-| Property | Value |
-|----------|-------|
-| Provider | Hetzner Cloud |
-| IP | `178.104.8.231` |
-| Arch | ARM64 (aarch64) |
-| OS | Ubuntu 24.04 LTS (kernel 6.8.0) |
-| SSH | `root@178.104.8.231` via key auth |
-| App Directory | `/app` |
+| Property      | Value                             |
+| ------------- | --------------------------------- |
+| Provider      | Hetzner Cloud                     |
+| IP            | `178.104.8.231`                   |
+| Arch          | ARM64 (aarch64)                   |
+| OS            | Ubuntu 24.04 LTS (kernel 6.8.0)   |
+| SSH           | `root@178.104.8.231` via key auth |
+| App Directory | `/app`                            |
 
 ## Domain & DNS
 
@@ -19,20 +19,20 @@ Production infrastructure running on Hetzner Cloud.
 
 ### DNS Records
 
-| Type | Name | Value | TTL |
-|------|------|-------|-----|
-| A | `@` | `178.104.8.231` | 600s |
-| A | `api` | `178.104.8.231` | 600s |
-| A | `addon` | `178.104.8.231` | 600s |
-| CNAME | `www` | `globalsubs-ai.com.` | 1h |
+| Type  | Name    | Value                | TTL  |
+| ----- | ------- | -------------------- | ---- |
+| A     | `@`     | `178.104.8.231`      | 600s |
+| A     | `api`   | `178.104.8.231`      | 600s |
+| A     | `addon` | `178.104.8.231`      | 600s |
+| CNAME | `www`   | `globalsubs-ai.com.` | 1h   |
 
 ### URL Routing
 
-| URL | Service | Internal Port |
-|-----|---------|---------------|
-| `https://globalsubs-ai.com` | Next.js Web App | 3010 |
-| `https://api.globalsubs-ai.com` | Fastify REST API | 3011 |
-| `https://addon.globalsubs-ai.com` | Stremio Add-on | 3012 |
+| URL                               | Service          | Internal Port |
+| --------------------------------- | ---------------- | ------------- |
+| `https://globalsubs-ai.com`       | Next.js Web App  | 3010          |
+| `https://api.globalsubs-ai.com`   | Fastify REST API | 3011          |
+| `https://addon.globalsubs-ai.com` | Stremio Add-on   | 3012          |
 
 ## Nginx Reverse Proxy
 
@@ -106,12 +106,12 @@ tail -f /var/log/nginx/access.log
 
 Certificates are managed by **Let's Encrypt** via **certbot** with the Nginx plugin.
 
-| Property | Value |
-|----------|-------|
-| Certificate path | `/etc/letsencrypt/live/globalsubs-ai.com/` |
-| Domains covered | `globalsubs-ai.com`, `www.globalsubs-ai.com`, `api.globalsubs-ai.com`, `addon.globalsubs-ai.com` |
-| Expiry | Auto-renews (certbot timer) |
-| Renewal command | `certbot renew` (runs automatically) |
+| Property         | Value                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------ |
+| Certificate path | `/etc/letsencrypt/live/globalsubs-ai.com/`                                                       |
+| Domains covered  | `globalsubs-ai.com`, `www.globalsubs-ai.com`, `api.globalsubs-ai.com`, `addon.globalsubs-ai.com` |
+| Expiry           | Auto-renews (certbot timer)                                                                      |
+| Renewal command  | `certbot renew` (runs automatically)                                                             |
 
 ### Manual certificate renewal
 
@@ -138,13 +138,13 @@ certbot --nginx \
 
 ### Installed Software
 
-| Software | Version |
-|----------|---------|
-| Docker | 28.2.2 |
-| Docker Compose | v2.37.1 |
-| Nginx | 1.24.0 |
-| Certbot | 2.9.0 |
-| Git | (system) |
+| Software       | Version  |
+| -------------- | -------- |
+| Docker         | 28.2.2   |
+| Docker Compose | v2.37.1  |
+| Nginx          | 1.24.0   |
+| Certbot        | 2.9.0    |
+| Git            | (system) |
 
 ### Docker DNS
 
@@ -183,11 +183,11 @@ The server runs on ARM64 (aarch64). Key considerations:
 
 Ensure these ports are open in Hetzner firewall:
 
-| Port | Protocol | Purpose |
-|------|----------|---------|
-| 22 | TCP | SSH |
-| 80 | TCP | HTTP (redirects to HTTPS) |
-| 443 | TCP | HTTPS |
+| Port | Protocol | Purpose                   |
+| ---- | -------- | ------------------------- |
+| 22   | TCP      | SSH                       |
+| 80   | TCP      | HTTP (redirects to HTTPS) |
+| 443  | TCP      | HTTPS                     |
 
 Docker container ports (3010-3012) do NOT need to be exposed externally — Nginx proxies to them on localhost.
 

@@ -76,9 +76,9 @@ Runs **only** on push to `main` after `build-and-test` passes:
 
 All secrets use the `GLOBAL_SUBS_` prefix:
 
-| Secret | Description |
-|--------|-------------|
-| `GLOBAL_SUBS_DEPLOY_USER` | SSH username (`root`) |
+| Secret                       | Description                    |
+| ---------------------------- | ------------------------------ |
+| `GLOBAL_SUBS_DEPLOY_USER`    | SSH username (`root`)          |
 | `GLOBAL_SUBS_DEPLOY_SSH_KEY` | SSH private key for the server |
 
 ## Manual Deployment
@@ -115,15 +115,15 @@ The production compose file is at [`infra/docker-compose.prod.yml`](../infra/doc
 
 ### Services
 
-| Service | Image | Internal Port | Host Port | Notes |
-|---------|-------|---------------|-----------|-------|
-| postgres | postgres:16-alpine | 5432 | 5432 | Persistent volume, healthcheck |
-| redis | redis:7-alpine | 6379 | 6379 | Password-protected, 256MB max |
-| api | packages/api/Dockerfile | 3001 | 3011 | `API_PORT=3001` override |
-| workers | packages/workers/Dockerfile | — | — | No HTTP port |
-| addon | packages/addon/Dockerfile | 7000 | 3012 | Stremio manifest |
-| scrapers | packages/scrapers/Dockerfile | — | — | No HTTP port |
-| web | packages/web/Dockerfile | 3000 | 3010 | Next.js standalone |
+| Service  | Image                        | Internal Port | Host Port | Notes                          |
+| -------- | ---------------------------- | ------------- | --------- | ------------------------------ |
+| postgres | postgres:16-alpine           | 5432          | 5432      | Persistent volume, healthcheck |
+| redis    | redis:7-alpine               | 6379          | 6379      | Password-protected, 256MB max  |
+| api      | packages/api/Dockerfile      | 3001          | 3011      | `API_PORT=3001` override       |
+| workers  | packages/workers/Dockerfile  | —             | —         | No HTTP port                   |
+| addon    | packages/addon/Dockerfile    | 7000          | 3012      | Stremio manifest               |
+| scrapers | packages/scrapers/Dockerfile | —             | —         | No HTTP port                   |
+| web      | packages/web/Dockerfile      | 3000          | 3010      | Next.js standalone             |
 
 ### Port Mapping Note
 

@@ -51,6 +51,16 @@ const envSchema = z.object({
   // Stripe (optional - sandbox mode when not set)
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PRICE_PACK50: z.string().optional(),
+  STRIPE_PRICE_PACK100: z.string().optional(),
+  STRIPE_PRICE_UNLIMITED: z.string().optional(),
+
+  // PayPal (optional - disabled when not set)
+  PAYPAL_CLIENT_ID: z.string().optional(),
+  PAYPAL_CLIENT_SECRET: z.string().optional(),
+  PAYPAL_WEBHOOK_ID: z.string().optional(),
+  PAYPAL_PLAN_UNLIMITED: z.string().optional(),
+  PAYPAL_MODE: z.enum(['sandbox', 'live']).default('sandbox'),
 
   // Internal
   INTERNAL_API_TOKEN: z

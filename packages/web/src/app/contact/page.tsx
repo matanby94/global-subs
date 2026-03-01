@@ -120,8 +120,8 @@ export default function ContactPage() {
                                     <div className="text-2xl">📧</div>
                                     <div>
                                         <h3 className="font-semibold text-gray-900">Email</h3>
-                                        <a href="mailto:support@globalsubs.net" className="text-primary hover:underline">
-                                            support@globalsubs.net
+                                        <a href="mailto:support@globalsubs-ai.com" className="text-primary hover:underline">
+                                            support@globalsubs-ai.com
                                         </a>
                                     </div>
                                 </div>

@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     'Professional AI-powered subtitle translations for movies and series in 100+ languages. Fast, accurate, and affordable.',
   keywords: ['subtitles', 'translation', 'ai', 'multilingual', 'stremio', 'globalsubs'],
   authors: [{ name: 'GlobalSubs' }],
-  metadataBase: new URL('https://globalsubs.net'),
+  metadataBase: new URL('https://globalsubs-ai.com'),
   alternates: {
     canonical: '/',
   },
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     title: 'GlobalSubs - AI-Powered Subtitle Translations',
     description: 'Professional subtitle translations in 100+ languages',
     type: 'website',
-    url: 'https://globalsubs.net',
+    url: 'https://globalsubs-ai.com',
     siteName: 'GlobalSubs',
     locale: 'en_US',
   },
@@ -54,7 +54,7 @@ const structuredData = {
   name: 'GlobalSubs',
   description:
     'Professional AI-powered subtitle translation service supporting 100+ languages',
-  url: 'https://globalsubs.net',
+  url: 'https://globalsubs-ai.com',
   applicationCategory: 'MultimediaApplication',
   operatingSystem: 'Any',
   offers: {

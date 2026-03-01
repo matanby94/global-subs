@@ -56,6 +56,20 @@ export interface PricingRule {
   createdAt: Date;
 }
 
+export interface Subscription {
+  id: string;
+  userId: string;
+  stripeSubscriptionId: string;
+  stripeCustomerId: string;
+  plan: 'unlimited';
+  status: 'active' | 'canceled' | 'past_due' | 'trialing' | 'incomplete';
+  currentPeriodStart: Date;
+  currentPeriodEnd: Date;
+  cancelAtPeriodEnd: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface Job {
   id: string;
   kind: 'ingest' | 'translate' | 'postcheck';

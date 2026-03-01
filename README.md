@@ -87,7 +87,7 @@ Once started, access:
 ### Demo Credentials
 
 ```
-Email: demo@globalsubs.net
+Email: demo@globalsubs-ai.com
 Credits: 100 (pre-loaded)
 ```
 
@@ -275,8 +275,8 @@ MIT © [Your Name]
 
 ## 📧 Contact
 
-- Website: https://globalsubs.net
-- Email: support@globalsubs.net
+- Website: https://globalsubs-ai.com
+- Email: support@globalsubs-ai.com
 - Twitter: [@globalsubs](https://twitter.com/globalsubs)
 
 ---

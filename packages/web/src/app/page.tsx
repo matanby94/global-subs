@@ -43,8 +43,8 @@ const FEATURES = [
         iconPath: 'M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125',
     },
     {
-        title: 'Credit-Based Pricing',
-        description: 'Buy credits once; use them whenever. No subscriptions, no expiration.',
+        title: 'Flexible Pricing',
+        description: 'Buy credit packs or go unlimited monthly. No hidden fees, no expiration on credits.',
         color: 'from-rose-500 to-red-500',
         iconPath: 'M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z',
     },
@@ -63,9 +63,9 @@ const TESTIMONIALS = [
 ];
 
 const PRICING = [
-    { name: 'Starter', price: '$9', credits: '10 Movies', description: 'Perfect for trying it out', features: ['10 movie translations', '50+ languages', 'Standard processing', 'Email support'], popular: false, gradient: 'from-blue-500 to-indigo-500' },
-    { name: 'Popular', price: '$29', credits: '50 Movies', description: 'Best value for enthusiasts', features: ['50 movie translations', '100+ languages', 'Priority processing', 'Priority support', 'Never expires', 'API access'], popular: true, gradient: 'from-purple-500 to-pink-500' },
-    { name: 'Pro', price: '$99', credits: '200 Movies', description: 'For power users & teams', features: ['200 movie translations', '100+ languages', 'Fastest processing', 'Premium support', 'Never expires', 'API access', 'Bulk discounts'], popular: false, gradient: 'from-amber-500 to-orange-500' },
+    { name: '50 Pack', price: '$9', period: 'one-time', credits: '50 Translations', description: 'Great for casual viewers', features: ['50 subtitle translations', '100+ languages', 'GPT-4o, Gemini & DeepL', 'Standard processing', 'Never expires'], popular: false, gradient: 'from-blue-500 to-indigo-500', cta: 'Buy Now', href: '/app?checkout=pack50' },
+    { name: '100 Pack', price: '$15', period: 'one-time', credits: '100 Translations', description: 'Best value for enthusiasts', features: ['100 subtitle translations', '100+ languages', 'GPT-4o, Gemini & DeepL', 'Priority processing', 'Priority support', 'Never expires'], popular: true, gradient: 'from-purple-500 to-pink-500', cta: 'Buy Now', href: '/app?checkout=pack100' },
+    { name: 'Unlimited', price: '$12', period: '/month', credits: 'Unlimited Translations', description: 'For power users & binge watchers', features: ['Unlimited subtitle translations', '100+ languages', 'GPT-4o, Gemini & DeepL', 'Fastest processing', 'Premium support', 'API access', 'Cancel anytime'], popular: false, gradient: 'from-amber-500 to-orange-500', cta: 'Subscribe', href: '/app?checkout=unlimited' },
 ];
 
 /* ── Inline SVG icon component ── */
@@ -363,7 +363,7 @@ export default function HomePage() {
                                 Simple, Transparent Pricing
                             </h2>
                             <p className="text-lg text-gray-500 max-w-xl mx-auto">
-                                Buy credits once. No subscriptions, no hidden fees, no expiration.
+                                Buy credits once or go unlimited. Pay with card or PayPal — no hidden fees.
                             </p>
                         </ScrollReveal>
 
@@ -388,7 +388,7 @@ export default function HomePage() {
                                             <h3 className="text-lg font-bold mb-2 text-gray-900">{plan.name}</h3>
                                             <div className="flex items-baseline justify-center gap-1 mb-1">
                                                 <span className="text-4xl font-extrabold gradient-text">{plan.price}</span>
-                                                <span className="text-gray-400 text-sm">one-time</span>
+                                                <span className="text-gray-400 text-sm">{plan.period}</span>
                                             </div>
                                             <p className="text-gray-500 text-sm">{plan.description}</p>
                                         </div>
@@ -409,17 +409,32 @@ export default function HomePage() {
                                         </ul>
 
                                         <Link
-                                            href="/app"
+                                            href={plan.href}
                                             className={`block text-center py-3.5 rounded-xl font-semibold text-sm transition-all duration-200 ${plan.popular
                                                 ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:shadow-lg hover:shadow-purple-200 hover:scale-[1.02]'
                                                 : 'border-2 border-purple-200 text-purple-700 hover:bg-purple-50'
                                                 }`}
                                         >
-                                            Get Started
+                                            {plan.cta}
                                         </Link>
                                     </div>
                                 </ScrollReveal>
                             ))}
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-center gap-6 mt-10">
+                            <div className="flex items-center gap-2 text-sm text-gray-400">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                                </svg>
+                                Secure checkout
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-gray-400">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+                                </svg>
+                                Card &amp; PayPal accepted
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -446,7 +461,7 @@ export default function HomePage() {
                                     </svg>
                                 </Link>
                                 <a
-                                    href="stremio://127.0.0.1:3012/manifest.json"
+                                    href={`stremio://${(() => { try { return new URL(process.env.NEXT_PUBLIC_ADDON_MANIFEST_URL || '').host; } catch { return '127.0.0.1:3012'; } })()}/manifest.json`}
                                     className="inline-flex items-center justify-center gap-2 border-2 border-white/30 text-white px-8 py-4 rounded-2xl text-lg font-semibold hover:bg-white/10 transition-all duration-200"
                                     aria-label="Install GlobalSubs Stremio Add-on"
                                 >

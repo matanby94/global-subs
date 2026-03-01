@@ -75,8 +75,8 @@ export default function PrivacyPage() {
                     <h2 className="text-2xl font-bold mt-8 mb-4 text-primary">6. Contact Us</h2>
                     <p className="text-gray-700 mb-6">
                         If you have any questions about this Privacy Policy, please contact us at{' '}
-                        <a href="mailto:privacy@globalsubs.net" className="text-primary hover:underline">
-                            privacy@globalsubs.net
+                        <a href="mailto:privacy@globalsubs-ai.com" className="text-primary hover:underline">
+                            privacy@globalsubs-ai.com
                         </a>
                     </p>
                 </div>

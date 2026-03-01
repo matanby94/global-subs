@@ -65,13 +65,22 @@ try {
 
 ### Pricing & Credit Model
 
-**One-time bundle purchases** (NOT subscriptions or pay-per-use):
+**Credit packs (one-time) + unlimited subscription:**
 
 - **Free Tier**: 10 translations (auto-granted on signup)
-- **Starter Tier**: 100 translations for $9 (one-time purchase)
-- **Pro Tier**: 1,000 translations for $29 (one-time purchase)
+- **50 Pack**: 50 translations for $9 (one-time purchase)
+- **100 Pack**: 100 translations for $15 (one-time purchase)
+- **Unlimited**: $12/month subscription — unlimited translations, cancel anytime
 
-Users purchase credits upfront and use them as needed - no expiration, no recurring charges. Each translation request debits **1 credit** from user's wallet, regardless of cache hit/miss. The `pricing_rules` table with `charge_mode` fields is legacy - ignore for now.
+Credit pack users purchase credits upfront and use them as needed — no expiration, no recurring charges. Each translation request debits **1 credit** from user's wallet, regardless of cache hit/miss.
+
+**Subscription users bypass the credit wallet entirely.** The translation routes check the `subscriptions` table first — if the user has an active subscription with `current_period_end > NOW()`, no credits are debited (a zero-delta audit log is still recorded). Credits in the wallet remain intact and usable if the subscription lapses.
+
+**Stripe integration**: Uses Stripe Checkout Sessions (not raw PaymentIntents). Bundle purchases use `mode: 'payment'`, subscriptions use `mode: 'subscription'`. Credit granting and subscription activation happen via the Stripe webhook handler at `/api/webhooks/stripe`. In sandbox mode (no `STRIPE_SECRET_KEY`), credits are granted directly and mock subscriptions are created.
+
+**PayPal integration**: Alternative payment method alongside Stripe. Uses PayPal REST API v2 (Orders API for one-time bundles, Subscriptions API for recurring plans). Helper in `packages/api/src/lib/paypal.ts`. PayPal orders/subscriptions are created in credits.ts, captured via `/api/credits/paypal-capture` on user return, and verified by PayPal webhook at `/api/webhooks/paypal`. PayPal subscription IDs are stored in the `subscriptions` table prefixed with `paypal_` in the `stripe_subscription_id` column. Enabled when `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` are set.
+
+The `pricing_rules` table with `charge_mode` fields is legacy — ignore for now.
 
 ### Artifact Hash System
 
@@ -236,9 +245,19 @@ OPENAI_API_KEY=sk-...
 GOOGLE_API_KEY=...
 DEEPL_API_KEY=...
 
-# Payment (Stripe for bundle purchases)
+# Payment (Stripe for bundles + subscriptions)
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_PACK50=price_...
+STRIPE_PRICE_PACK100=price_...
+STRIPE_PRICE_UNLIMITED=price_...
+
+# PayPal (optional — alternative payment method)
+PAYPAL_CLIENT_ID=...
+PAYPAL_CLIENT_SECRET=...
+PAYPAL_WEBHOOK_ID=...
+PAYPAL_PLAN_UNLIMITED=P-...
+PAYPAL_MODE=sandbox
 ```
 
 **Never** commit `.env` - use `.env.example` as template.
@@ -250,15 +269,21 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 3. **Cache invalidation**: Artifact hash changes with ANY parameter - don't assume same source = same hash
 4. **S3 keys**: Always use format `artifacts/{hash}/{hash}.vtt` for consistency
 5. **Migrations**: No rollback logic - write careful forward-only migrations
-6. **Charging model**: Always debit 1 credit per translation request, even on cache hits
+6. **Charging model**: Debit 1 credit per translation for credit-pack users (even on cache hits). Subscription users bypass credits — check `subscriptions` table first
 7. **Free trial**: New signups automatically get 10 credits - implement in signup flow
+8. **Subscription bypass**: Always check `subscriptions WHERE status = 'active' AND current_period_end > NOW()` before debiting credits
 
 ## Key Files to Reference
 
 - `packages/shared/src/schemas.ts` - All Zod validation schemas
 - `packages/shared/src/utils.ts` - Hash generation, WebVTT validation
+- `packages/api/src/routes/credits.ts` - Bundle purchases, subscriptions, Stripe & PayPal Checkout
+- `packages/api/src/routes/webhooks.ts` - Stripe webhook handler
+- `packages/api/src/routes/paypal-webhooks.ts` - PayPal webhook handler
+- `packages/api/src/lib/paypal.ts` - PayPal REST API helper
 - `packages/api/src/routes/translations.ts` - Cache-first translation flow
-- `infra/migrations/001_init.sql` - Complete database schema
+- `infra/migrations/001_init.sql` - Core database schema
+- `infra/migrations/008_subscriptions.sql` - Subscriptions table
 - `docs/ARCHITECTURE.md` - System design and data flows
 
 ## Quick Reference

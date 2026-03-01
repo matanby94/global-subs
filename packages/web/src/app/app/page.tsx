@@ -130,7 +130,10 @@ export default function AppPage() {
   const [personalizedManifestUrl, setPersonalizedManifestUrl] = useState<string>(ADDON_MANIFEST_URL);
   const [personalizedStremioInstallUrl, setPersonalizedStremioInstallUrl] = useState<string>(STREMIO_INSTALL_URL);
   const [copied, setCopied] = useState(false);
-  const [topUpLoading, setTopUpLoading] = useState(false);
+  const [showBuyModal, setShowBuyModal] = useState(false);
+  const [subscription, setSubscription] = useState<{ plan: string; status: string; currentPeriodEnd: string; cancelAtPeriodEnd: boolean } | null>(null);
+  const [purchaseLoading, setPurchaseLoading] = useState<string | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
 
   useEffect(() => {
     const storedLang = localStorage.getItem('preferredDstLang');
@@ -181,22 +184,114 @@ export default function AppPage() {
     }
   }
 
-  async function handleTopUp() {
-    if (!accessToken || topUpLoading) return;
-    setTopUpLoading(true);
+  // Fetch subscription status
+  useEffect(() => {
+    async function fetchSubscription() {
+      if (!accessToken) return;
+      try {
+        const res = await axios.get(`${API_URL}/api/credits/subscription`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        setSubscription(res.data?.subscription || null);
+      } catch {
+        setSubscription(null);
+      }
+    }
+    fetchSubscription();
+  }, [accessToken]);
+
+  // Handle checkout query params (returning from Stripe or PayPal)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const payment = params.get('payment');
+
+    if (payment === 'success') {
+      // Check if returning from PayPal and need to capture
+      const ppOrderId = params.get('paypal_order_id');
+      const ppSubId = params.get('paypal_subscription_id');
+
+      if ((ppOrderId || ppSubId) && accessToken) {
+        // Capture PayPal payment/subscription
+        (async () => {
+          try {
+            await axios.post(
+              `${API_URL}/api/credits/paypal-capture`,
+              { orderId: ppOrderId || undefined, subscriptionId: ppSubId || undefined },
+              { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
+          } catch { /* webhook will handle as backup */ }
+          refreshUser();
+        })();
+      } else {
+        refreshUser();
+      }
+      window.history.replaceState({}, '', '/app');
+    } else if (payment === 'canceled') {
+      window.history.replaceState({}, '', '/app');
+    }
+
+    // Handle checkout param from pricing page (shows payment method selection)
+    const checkout = params.get('checkout');
+    if (checkout && accessToken) {
+      setShowBuyModal(true);
+      setSelectedPlan(checkout);
+      window.history.replaceState({}, '', '/app');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
+
+  async function handlePurchase(planId: string, paymentMethod: 'stripe' | 'paypal' = 'stripe') {
+    if (!accessToken || purchaseLoading) return;
+    setPurchaseLoading(`${planId}_${paymentMethod}`);
     try {
-      await axios.post(
-        `${API_URL}/api/credits/topup`,
-        { amount: 10, paymentMethodId: 'sandbox_test' },
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      await refreshUser();
+      let res;
+      if (planId === 'unlimited') {
+        res = await axios.post(
+          `${API_URL}/api/credits/subscribe`,
+          { plan: 'unlimited', paymentMethod },
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+      } else {
+        res = await axios.post(
+          `${API_URL}/api/credits/purchase`,
+          { bundle: planId, paymentMethod },
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+      }
+
+      // Provider returned a checkout/approval URL — redirect
+      if (res.data?.checkoutUrl) {
+        window.location.href = res.data.checkoutUrl;
+        return;
+      }
+
+      // Sandbox mode: credits were granted directly
+      if (res.data?.success) {
+        await refreshUser();
+        setShowBuyModal(false);
+        setSelectedPlan(null);
+      }
     } catch {
       // silently fail
     } finally {
-      setTopUpLoading(false);
+      setPurchaseLoading(null);
     }
   }
+
+  async function handleCancelSubscription() {
+    if (!accessToken) return;
+    try {
+      await axios.post(
+        `${API_URL}/api/credits/cancel-subscription`,
+        { cancelAtPeriodEnd: true },
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      setSubscription((prev) => prev ? { ...prev, cancelAtPeriodEnd: true } : null);
+    } catch {
+      // silently fail
+    }
+  }
+
 
   function handleCopyManifest() {
     navigator.clipboard.writeText(personalizedManifestUrl);
@@ -362,18 +457,30 @@ export default function AppPage() {
             <div className="relative">
               <div className="flex items-center gap-2 mb-3">
                 <CreditIcon className="w-5 h-5 text-purple-200" />
-                <span className="text-purple-200 text-sm font-medium">Available Credits</span>
+                <span className="text-purple-200 text-sm font-medium">
+                  {subscription?.status === 'active' ? 'Unlimited Plan' : 'Available Credits'}
+                </span>
               </div>
-              <div className="text-4xl font-extrabold tracking-tight mb-4">
-                {creditBalance.toFixed(0)}
-              </div>
+              {subscription?.status === 'active' ? (
+                <div className="mb-4">
+                  <div className="text-2xl font-extrabold tracking-tight mb-1">Unlimited</div>
+                  <div className="text-purple-200 text-xs">
+                    {subscription.cancelAtPeriodEnd
+                      ? `Cancels ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`
+                      : `Renews ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-4xl font-extrabold tracking-tight mb-4">
+                  {creditBalance.toFixed(0)}
+                </div>
+              )}
               <button
-                onClick={handleTopUp}
-                disabled={topUpLoading}
-                className="inline-flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all duration-200 backdrop-blur-sm disabled:opacity-50"
+                onClick={() => setShowBuyModal(true)}
+                className="inline-flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all duration-200 backdrop-blur-sm"
               >
                 <PlusIcon className="w-4 h-4" />
-                {topUpLoading ? 'Adding...' : 'Add Credits'}
+                {subscription?.status === 'active' ? 'Manage Plan' : 'Buy Credits'}
               </button>
             </div>
           </div>
@@ -541,6 +648,210 @@ export default function AppPage() {
             ))}
           </div>
         </motion.div>
+
+        {/* ─── Purchase / Manage Plan Modal ─── */}
+        <AnimatePresence>
+          {showBuyModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+              onClick={() => { setShowBuyModal(false); setSelectedPlan(null); }}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                transition={{ duration: 0.2 }}
+                className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-lg p-6 sm:p-8"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-gray-900">
+                    {subscription?.status === 'active'
+                      ? 'Manage Plan'
+                      : selectedPlan
+                        ? 'Choose Payment Method'
+                        : 'Get Credits'}
+                  </h2>
+                  <button
+                    onClick={() => { setShowBuyModal(false); setSelectedPlan(null); }}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {subscription?.status === 'active' ? (
+                  <div>
+                    <div className="bg-gradient-to-br from-purple-50 to-white rounded-xl border border-purple-100 p-5 mb-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">Active</span>
+                        <span className="text-sm font-semibold text-gray-900">Unlimited Plan</span>
+                      </div>
+                      <p className="text-sm text-gray-500">$12/month — unlimited subtitle translations</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {subscription.cancelAtPeriodEnd
+                          ? `Your subscription will end on ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`
+                          : `Next billing date: ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`}
+                      </p>
+                    </div>
+                    {!subscription.cancelAtPeriodEnd && (
+                      <button
+                        onClick={handleCancelSubscription}
+                        className="w-full text-center py-2.5 rounded-xl text-sm font-medium text-red-600 border border-red-200 hover:bg-red-50 transition-colors"
+                      >
+                        Cancel Subscription
+                      </button>
+                    )}
+                  </div>
+                ) : selectedPlan ? (
+                  /* ─── Step 2: Payment Method Selection ─── */
+                  <div className="space-y-4">
+                    <button
+                      onClick={() => setSelectedPlan(null)}
+                      className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors -mt-2 mb-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                      </svg>
+                      Back to plans
+                    </button>
+
+                    <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 mb-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-gray-900">
+                            {selectedPlan === 'pack50' ? '50 Pack' : selectedPlan === 'pack100' ? '100 Pack' : 'Unlimited'}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {selectedPlan === 'pack50' ? '50 subtitle translations' : selectedPlan === 'pack100' ? '100 subtitle translations' : 'Unlimited translations, cancel anytime'}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold text-purple-700">
+                            {selectedPlan === 'pack50' ? '$9' : selectedPlan === 'pack100' ? '$15' : '$12'}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {selectedPlan === 'unlimited' ? '/month' : 'one-time'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Pay with Card (Stripe) */}
+                    <button
+                      onClick={() => handlePurchase(selectedPlan, 'stripe')}
+                      disabled={!!purchaseLoading}
+                      className="w-full flex items-center justify-center gap-3 bg-gray-900 hover:bg-gray-800 text-white rounded-xl py-3.5 px-4 transition-all duration-200 disabled:opacity-50 font-medium text-sm"
+                    >
+                      {purchaseLoading === `${selectedPlan}_stripe` ? (
+                        <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+                        </svg>
+                      )}
+                      Pay with Card
+                    </button>
+
+                    {/* Pay with PayPal */}
+                    <button
+                      onClick={() => handlePurchase(selectedPlan, 'paypal')}
+                      disabled={!!purchaseLoading}
+                      className="w-full flex items-center justify-center gap-3 bg-[#0070ba] hover:bg-[#005ea6] text-white rounded-xl py-3.5 px-4 transition-all duration-200 disabled:opacity-50 font-medium text-sm"
+                    >
+                      {purchaseLoading === `${selectedPlan}_paypal` ? (
+                        <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                      ) : (
+                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M7.076 21.337H2.47a.641.641 0 01-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797H9.6c-.564 0-1.04.408-1.13.964L7.076 21.337zm7.38-13.498c-.112.733-.362 1.333-.776 1.794-.61.682-1.627.927-2.883.927h-.525l.698-4.418a.418.418 0 01.413-.356h.242c.88 0 1.713 0 2.14.503.256.3.348.744.253 1.55h.438z" />
+                        </svg>
+                      )}
+                      Pay with PayPal
+                    </button>
+
+                    <p className="text-center text-xs text-gray-400 pt-1">
+                      Secure checkout. You&apos;ll be redirected to complete payment.
+                    </p>
+                  </div>
+                ) : (
+                  /* ─── Step 1: Plan Selection ─── */
+                  <div className="space-y-3">
+                    {/* 50 Pack */}
+                    <button
+                      onClick={() => setSelectedPlan('pack50')}
+                      disabled={!!purchaseLoading}
+                      className="w-full flex items-center justify-between bg-gray-50 hover:bg-purple-50 border border-gray-200 hover:border-purple-200 rounded-xl p-4 transition-all duration-200 disabled:opacity-50"
+                    >
+                      <div className="text-left">
+                        <div className="font-bold text-gray-900">50 Pack</div>
+                        <div className="text-xs text-gray-500">50 subtitle translations</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold text-purple-700">$9</div>
+                        <div className="text-xs text-gray-400">one-time</div>
+                      </div>
+                    </button>
+
+                    {/* 100 Pack */}
+                    <button
+                      onClick={() => setSelectedPlan('pack100')}
+                      disabled={!!purchaseLoading}
+                      className="w-full flex items-center justify-between bg-purple-50 hover:bg-purple-100/60 border-2 border-purple-200 rounded-xl p-4 transition-all duration-200 relative disabled:opacity-50"
+                    >
+                      <span className="absolute -top-2.5 left-4 bg-purple-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">Best Value</span>
+                      <div className="text-left">
+                        <div className="font-bold text-gray-900">100 Pack</div>
+                        <div className="text-xs text-gray-500">100 subtitle translations</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold text-purple-700">$15</div>
+                        <div className="text-xs text-gray-400">one-time</div>
+                      </div>
+                    </button>
+
+                    {/* Unlimited */}
+                    <button
+                      onClick={() => setSelectedPlan('unlimited')}
+                      disabled={!!purchaseLoading}
+                      className="w-full flex items-center justify-between bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 border border-amber-200 rounded-xl p-4 transition-all duration-200 disabled:opacity-50"
+                    >
+                      <div className="text-left">
+                        <div className="font-bold text-gray-900">Unlimited</div>
+                        <div className="text-xs text-gray-500">Unlimited translations, cancel anytime</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold text-amber-700">$12</div>
+                        <div className="text-xs text-gray-400">/month</div>
+                      </div>
+                    </button>
+
+                    <div className="flex items-center justify-center gap-4 pt-3">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+                        </svg>
+                        Card
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M7.076 21.337H2.47a.641.641 0 01-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797H9.6c-.564 0-1.04.408-1.13.964L7.076 21.337z" />
+                        </svg>
+                        PayPal
+                      </div>
+                      <span className="text-xs text-gray-300">|</span>
+                      <span className="text-xs text-gray-400">Secure checkout</span>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
     </div>
   );

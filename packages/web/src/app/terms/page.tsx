@@ -103,8 +103,8 @@ export default function TermsPage() {
                     <h2 className="text-2xl font-bold mt-8 mb-4 text-primary">11. Contact Information</h2>
                     <p className="text-gray-700 mb-6">
                         For questions about these Terms of Service, contact us at{' '}
-                        <a href="mailto:legal@globalsubs.net" className="text-primary hover:underline">
-                            legal@globalsubs.net
+                        <a href="mailto:legal@globalsubs-ai.com" className="text-primary hover:underline">
+                            legal@globalsubs-ai.com
                         </a>
                     </p>
                 </div>
