@@ -2,9 +2,15 @@ import { FastifyInstance } from 'fastify';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { generateArtifactHash, normalizeSubtitleToWebVTT } from '@stremio-ai-subs/shared';
+import {
+  generateArtifactHash,
+  normalizeSubtitleToWebVTT,
+  validateWebVTT,
+  resolveSubtitleText,
+} from '@stremio-ai-subs/shared';
+import crypto from 'node:crypto';
 import { BUCKET_NAME, s3PresignClient } from '../storage';
-import { translateQueue, scrapeQueue } from '../queue';
+import { translateQueue } from '../queue';
 import { db } from '../db';
 
 // ──────────────────────────────────────────────
@@ -310,70 +316,6 @@ async function isNegativelyCached(
     [srcRegistry, srcId, lang, NEGATIVE_CACHE_TTL_MS]
   );
   return result.rows.length > 0;
-}
-
-/**
- * Enqueue a high-priority scrape job for the given content + language.
- * Upserts into scrape_requests and adds a BullMQ job.
- * Returns true if a new job was enqueued, false if one already existed / is processing.
- */
-async function enqueueAdHocScrape(
-  srcRegistry: string,
-  srcId: string,
-  lang: string,
-  opts?: {
-    autoTranslate?: {
-      dstLang: string;
-      model: string;
-      srcLang: string;
-      userId: string;
-      artifactHash: string;
-    };
-  }
-): Promise<boolean> {
-  const jobId = `${srcRegistry}|${srcId}|${lang}`;
-
-  // Upsert scrape_requests: create as pending (high priority), or reset failed -> pending.
-  // Skip if already pending or processing.
-  const { rowCount } = await db.query(
-    `INSERT INTO scrape_requests (src_registry, src_id, lang, status, priority)
-     VALUES ($1, $2, $3, 'pending', 1)
-     ON CONFLICT (src_registry, src_id, lang)
-     DO UPDATE SET
-       status = CASE
-         WHEN scrape_requests.status IN ('failed', 'not_found') THEN 'pending'
-         ELSE scrape_requests.status
-       END,
-       priority = CASE
-         WHEN scrape_requests.status IN ('failed', 'not_found') THEN 1
-         ELSE LEAST(scrape_requests.priority, 1)
-       END,
-       last_error = CASE
-         WHEN scrape_requests.status IN ('failed', 'not_found') THEN NULL
-         ELSE scrape_requests.last_error
-       END,
-       updated_at = NOW()
-     WHERE scrape_requests.status IN ('failed', 'not_found', 'pending')`,
-    [srcRegistry, srcId, lang]
-  );
-
-  // If the row already exists as processing/completed, don't re-enqueue.
-  // rowCount is 0 when the WHERE clause didn't match (status is processing/completed).
-
-  const jobData: Record<string, unknown> = { srcRegistry, srcId, lang };
-  if (opts?.autoTranslate) {
-    jobData.autoTranslate = opts.autoTranslate;
-  }
-
-  await scrapeQueue.add('scrape', jobData, {
-    jobId,
-    priority: 1, // High priority (lower number = higher priority)
-    removeOnComplete: true,
-    attempts: 5,
-    backoff: { type: 'exponential', delay: 10_000 },
-  });
-
-  return (rowCount ?? 0) > 0;
 }
 
 export async function ensureAddonSubtitle(
@@ -927,13 +869,17 @@ export async function ensureAddonSubtitle(
     };
   }
 
-  trace('stage5:no_inflight', 'No in-flight scrape found, will enqueue new scrape jobs');
+  trace('stage5:no_inflight', 'No in-flight scrape found, will try inline subtitle fetch');
 
   // ──────────────────────────────────────────────
-  // Stage 6: Enqueue high-priority scrape jobs
-  //          Scrape for target language + English source (if different).
-  //          The scrape processor will auto-enqueue a translate job on completion.
+  // Stage 6: Inline subtitle fetch + translate
+  //          Use resolveSubtitleText (shared) to fetch from providers
+  //          on-demand (SubDL, OpenSubtitles REST, MovieSubtitles).
+  //          If found, store in subtitle_sources + enqueue translate job.
+  //          Falls back to scrapeQueue only when providers are not configured.
   // ──────────────────────────────────────────────
+
+  const { imdbTt, imdbNumeric, season, episode } = parseImdbFromStremioId(srcId);
 
   const artifactHash = generateArtifactHash({
     srcRegistry,
@@ -945,61 +891,365 @@ export async function ensureAddonSubtitle(
     segPolicy: 'preserve_cues',
   });
 
-  // Enqueue scrape for target language (might be importable directly)
+  // Try fetching the target language directly first (might be importable without LLM).
+  const langsToTry: Array<{ lang: string; purpose: 'direct_import' | 'translate' }> = [];
   if (!dstNeg) {
-    trace('stage6:enqueue_target', `Enqueuing ad-hoc scrape for target lang=${dstLang}`, {
-      srcId,
-      lang: dstLang,
-      priority: 1,
-    });
-    fastify.log.info(
-      { stage: 'ensure:enqueue_scrape', srcId, lang: dstLang, priority: 1 },
-      'enqueuing ad-hoc scrape for target lang'
-    );
-    await enqueueAdHocScrape(srcRegistry, srcId, dstLang);
+    langsToTry.push({ lang: dstLang, purpose: 'direct_import' });
   }
-
-  // Enqueue scrape for English source (for LLM translation fallback)
   if (dstLang !== 'en' && !enNeg) {
-    trace('stage6:enqueue_en', `Enqueuing ad-hoc scrape for English + auto-translate`, {
-      srcId,
-      lang: 'en',
-      autoTranslate: true,
-    });
-    fastify.log.info(
-      { stage: 'ensure:enqueue_scrape', srcId, lang: 'en', priority: 1, autoTranslate: true },
-      'enqueuing ad-hoc scrape for English + auto-translate'
-    );
-    await enqueueAdHocScrape(srcRegistry, srcId, 'en', {
-      autoTranslate: {
-        dstLang,
-        model,
-        srcLang: 'en',
-        userId: input.userId,
-        artifactHash,
-      },
-    });
+    langsToTry.push({ lang: 'en', purpose: 'translate' });
   }
 
-  trace('stage6:done', 'Scrape jobs enqueued, returning processing status');
+  for (const { lang, purpose } of langsToTry) {
+    trace(
+      'stage6:inline_fetch',
+      `Fetching subtitle inline from providers: lang=${lang} purpose=${purpose}`,
+      { srcId, lang, purpose, imdbTt, season, episode }
+    );
+
+    let resolved: Awaited<ReturnType<typeof resolveSubtitleText>>;
+    try {
+      resolved = await resolveSubtitleText({
+        imdbTt,
+        imdbNumeric,
+        season,
+        episode,
+        lang,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'unknown error';
+      trace('stage6:inline_fetch_error', `resolveSubtitleText threw: ${msg}`, { lang, error: msg });
+      continue;
+    }
+
+    if (!resolved.ok) {
+      trace('stage6:inline_fetch_miss', `No subtitle found for lang=${lang}: ${resolved.reason}`, {
+        reason: resolved.reason,
+        errors: resolved.errors.map((e) => `${e.provider}:${e.message}`).slice(0, 5),
+        notes: resolved.notes.slice(0, 3),
+      });
+
+      // Record negative cache so we don't retry for 24h
+      await db
+        .query(
+          `INSERT INTO scrape_requests (src_registry, src_id, lang, status, priority, checked_at)
+         VALUES ($1, $2, $3, 'not_found', 1, NOW())
+         ON CONFLICT (src_registry, src_id, lang)
+         DO UPDATE SET
+           status = CASE
+             WHEN scrape_requests.status IN ('failed', 'not_found') THEN 'not_found'
+             ELSE scrape_requests.status
+           END,
+           checked_at = CASE
+             WHEN scrape_requests.status IN ('failed', 'not_found') THEN NOW()
+             ELSE scrape_requests.checked_at
+           END,
+           updated_at = NOW()
+         WHERE scrape_requests.status IN ('failed', 'not_found', 'pending')`,
+          [srcRegistry, srcId, lang]
+        )
+        .catch(() => undefined);
+
+      continue;
+    }
+
+    // ── Provider returned a subtitle, store it ──
+    trace(
+      'stage6:inline_fetch_found',
+      `Found subtitle from ${resolved.value.provider} for lang=${lang}`,
+      { provider: resolved.value.provider, chars: resolved.value.text.length }
+    );
+
+    const normalized = normalizeSubtitleToWebVTT(resolved.value.text);
+    const validation = validateWebVTT(normalized.vtt);
+
+    if (!validation.valid) {
+      trace(
+        'stage6:inline_quality_fail',
+        `Grade ${validation.grade} from ${resolved.value.provider} — skipping`,
+        { grade: validation.grade, errors: validation.errors.slice(0, 3) }
+      );
+      continue;
+    }
+
+    // Store in S3 + subtitle_sources (mirrors scrape processor logic)
+    const contentHash = crypto.createHash('sha256').update(normalized.vtt).digest('hex');
+    const sourceStorageKey = `sources/${contentHash}/${contentHash}.vtt`;
+
+    try {
+      await fastify.s3.send(
+        new PutObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: sourceStorageKey,
+          Body: normalized.vtt,
+          ContentType: 'text/vtt; charset=utf-8',
+        })
+      );
+
+      await fastify.db.query(
+        `INSERT INTO subtitle_sources (
+           src_registry, src_id, lang, provider, provider_ref, download_url,
+           content_hash, storage_key, original_format, status, validation, meta
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+         ON CONFLICT (src_registry, src_id, lang, content_hash)
+         DO UPDATE SET
+           storage_key = EXCLUDED.storage_key,
+           status = EXCLUDED.status,
+           validation = EXCLUDED.validation,
+           fetched_at = NOW(),
+           updated_at = NOW()`,
+        [
+          srcRegistry,
+          srcId,
+          lang,
+          resolved.value.provider,
+          resolved.value.providerRef,
+          resolved.value.downloadUrl,
+          contentHash,
+          sourceStorageKey,
+          normalized.format,
+          'available',
+          JSON.stringify(validation),
+          JSON.stringify({
+            detectedLang: resolved.value.detectedLang,
+            filename: resolved.value.filename,
+            ...resolved.value.meta,
+            inlineFetched: true,
+          }),
+        ]
+      );
+
+      // Mark scrape_requests as completed
+      await fastify.db
+        .query(
+          `INSERT INTO scrape_requests (src_registry, src_id, lang, status, priority, provider, checked_at)
+         VALUES ($1, $2, $3, 'completed', 1, $4, NOW())
+         ON CONFLICT (src_registry, src_id, lang)
+         DO UPDATE SET status = 'completed', provider = $4, checked_at = NOW(), updated_at = NOW()`,
+          [srcRegistry, srcId, lang, resolved.value.provider]
+        )
+        .catch(() => undefined);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'S3/DB store failed';
+      trace('stage6:store_error', `Failed to store fetched subtitle: ${msg}`, { error: msg });
+      continue;
+    }
+
+    trace('stage6:stored', `Stored source: ${sourceStorageKey}`, {
+      storageKey: sourceStorageKey,
+      grade: validation.grade,
+      score: validation.score,
+    });
+
+    if (purpose === 'direct_import') {
+      // Target language found — import directly as artifact (same as Stage 2)
+      const importArtifactHash = generateArtifactHash({
+        srcRegistry,
+        srcId,
+        srcLang: dstLang,
+        dstLang,
+        model: 'import',
+        normalization: 'v1',
+        segPolicy: 'preserve_cues',
+      });
+
+      let charged = false;
+      try {
+        charged = await chargeAddonOncePerLibraryKey(fastify, {
+          userId: input.userId,
+          libraryKey,
+        });
+        trace('stage6:charge', charged ? 'Charged 1 credit (inline import)' : 'Already charged', {
+          charged,
+        });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Failed to charge credits';
+        const code = msg === 'Insufficient credits' ? 402 : 400;
+        trace('stage6:charge_fail', `Charge failed: ${msg}`, { error: msg });
+        pushTransaction({
+          input,
+          rawId: srcId,
+          dstLang,
+          steps,
+          code,
+          status: 'error',
+          subtitles: 0,
+          t0,
+        });
+        return { code, body: { status: 'error', error: msg, subtitles: [] } };
+      }
+
+      const artifactStorageKey = `artifacts/${importArtifactHash}/${importArtifactHash}.vtt`;
+      await fastify.s3.send(
+        new PutObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: artifactStorageKey,
+          Body: normalized.vtt,
+          ContentType: 'text/vtt; charset=utf-8',
+        })
+      );
+
+      await fastify.db.query(
+        `INSERT INTO artifacts (hash, src_registry, src_id, src_lang, dst_lang, model, cost_chars, storage_key, checks_passed)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (hash) DO NOTHING`,
+        [
+          importArtifactHash,
+          srcRegistry,
+          srcId,
+          dstLang,
+          dstLang,
+          'import',
+          normalized.vtt.length,
+          artifactStorageKey,
+          JSON.stringify({ cps: true, charsPerLine: true }),
+        ]
+      );
+
+      const signedUrl = await getSignedArtifactUrl(fastify, importArtifactHash);
+      trace('stage6:direct_import_done', 'Fetched and imported subtitle directly', {
+        artifactHash: importArtifactHash,
+        provider: resolved.value.provider,
+        charged,
+      });
+      pushTransaction({
+        input,
+        rawId: srcId,
+        dstLang,
+        steps,
+        code: 200,
+        status: 'completed',
+        subtitles: signedUrl ? 1 : 0,
+        t0,
+      });
+      return {
+        code: 200,
+        body: {
+          status: 'completed',
+          charged,
+          artifactHash: importArtifactHash,
+          subtitles: signedUrl
+            ? [
+                {
+                  lang: toStremioSubtitleLangBranded(dstLang),
+                  label: toStremioSubtitleLabel(dstLang),
+                  url: signedUrl,
+                  id: importArtifactHash,
+                },
+              ]
+            : [],
+          imported: true,
+        },
+      };
+    }
+
+    // purpose === 'translate': English source found, enqueue LLM translation
+    let charged = false;
+    try {
+      charged = await chargeAddonOncePerLibraryKey(fastify, { userId: input.userId, libraryKey });
+      trace(
+        'stage6:charge',
+        charged ? 'Charged 1 credit (inline en→translate)' : 'Already charged',
+        { charged }
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to charge credits';
+      const code = msg === 'Insufficient credits' ? 402 : 400;
+      trace('stage6:charge_fail', `Charge failed: ${msg}`, { error: msg });
+      pushTransaction({
+        input,
+        rawId: srcId,
+        dstLang,
+        steps,
+        code,
+        status: 'error',
+        subtitles: 0,
+        t0,
+      });
+      return { code, body: { status: 'error', error: msg, subtitles: [] } };
+    }
+
+    await fastify.db.query(
+      `INSERT INTO translation_requests (user_id, artifact_hash, status, request_meta)
+       VALUES ($1, $2, 'pending', $3)
+       ON CONFLICT (user_id, artifact_hash) DO UPDATE SET updated_at = NOW()`,
+      [
+        input.userId,
+        artifactHash,
+        JSON.stringify({
+          srcRegistry,
+          srcId,
+          sourceLang: 'en',
+          dstLang,
+          model,
+          sourceProvider: resolved.value.provider,
+          inlineFetched: true,
+        }),
+      ]
+    );
+
+    await translateQueue.add(
+      'translate',
+      {
+        sourceSubtitle: normalized.vtt,
+        sourceLang: 'en',
+        targetLang: dstLang,
+        model,
+        artifactHash,
+        srcRegistry,
+        srcId,
+      },
+      {
+        jobId: artifactHash,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 10_000 },
+      }
+    );
+
+    trace('stage6:translate_enqueued', `Translation job enqueued: ${model} en→${dstLang}`, {
+      artifactHash,
+      model,
+      provider: resolved.value.provider,
+      charged,
+    });
+    pushTransaction({
+      input,
+      rawId: srcId,
+      dstLang,
+      steps,
+      code: 200,
+      status: 'processing',
+      subtitles: 0,
+      t0,
+    });
+    return {
+      code: 200,
+      body: { status: 'processing', charged, artifactHash, subtitles: [] },
+    };
+  }
+
+  // ── All providers exhausted — no subtitle available ──
+  trace('stage6:unavailable', 'No subtitle found at any provider for any language', {
+    triedLangs: langsToTry.map((l) => l.lang),
+  });
   pushTransaction({
     input,
     rawId: srcId,
     dstLang,
     steps,
     code: 200,
-    status: 'processing',
+    status: 'unavailable',
     subtitles: 0,
     t0,
   });
   return {
     code: 200,
     body: {
-      status: 'processing',
+      status: 'unavailable',
       charged: false,
       artifactHash: null,
       subtitles: [],
-      note: 'Source subtitle fetch has been queued',
+      note: 'No subtitle sources found at any provider for this content',
     },
   };
 }
