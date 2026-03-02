@@ -103,18 +103,20 @@ export async function sourceFetchProcessor(job: Job, deps?: { translateQueue?: Q
            ON CONFLICT (src_registry, src_id, lang)
            DO UPDATE SET
              status = CASE
-               WHEN scrape_requests.status IN ('failed', 'not_found') THEN 'not_found'
+               WHEN scrape_requests.status IN ('failed', 'not_found', 'processing') THEN 'not_found'
                ELSE scrape_requests.status
              END,
              checked_at = CASE
-               WHEN scrape_requests.status IN ('failed', 'not_found') THEN NOW()
+               WHEN scrape_requests.status IN ('failed', 'not_found', 'processing') THEN NOW()
                ELSE scrape_requests.checked_at
              END,
              updated_at = NOW()
-           WHERE scrape_requests.status IN ('failed', 'not_found', 'pending')`,
+           WHERE scrape_requests.status IN ('failed', 'not_found', 'pending', 'processing')`,
           [srcRegistry, srcId, lang]
         )
-        .catch(() => undefined);
+        .catch((err) => {
+          job.log(`source-fetch: DB error recording negative cache for lang=${lang}: ${err instanceof Error ? err.message : err}`);
+        });
       continue;
     }
 
@@ -330,8 +332,8 @@ async function markScrapeStatus(
   error?: string | null,
   provider?: string | null
 ) {
-  await db
-    .query(
+  try {
+    const res = await db.query(
       `UPDATE scrape_requests
        SET status = $1,
            last_error = $2,
@@ -340,6 +342,11 @@ async function markScrapeStatus(
            updated_at = NOW()
        WHERE src_registry = $4 AND src_id = $5 AND lang = $6`,
       [status, error || null, provider || null, srcRegistry, srcId, lang]
-    )
-    .catch(() => undefined);
+    );
+    if (res.rowCount === 0) {
+      console.warn(`[source-fetch] markScrapeStatus: no row matched for ${srcRegistry}/${srcId}/${lang}`);
+    }
+  } catch (err) {
+    console.error(`[source-fetch] markScrapeStatus DB error for ${srcRegistry}/${srcId}/${lang}:`, err);
+  }
 }
