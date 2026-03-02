@@ -896,7 +896,7 @@ export async function ensureAddonSubtitle(
     )
     .catch(() => undefined);
 
-  const jobId = `sf:${srcRegistry}:${srcId}:${dstLang}:${model}`;
+  const jobId = `sf_${srcRegistry}_${srcId.replace(/:/g, '_')}_${dstLang}_${model}`;
 
   await sourceFetchQueue.add(
     'source-fetch',
