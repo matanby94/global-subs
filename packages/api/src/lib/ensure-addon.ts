@@ -2,10 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import {
-  generateArtifactHash,
-  normalizeSubtitleToWebVTT,
-} from '@stremio-ai-subs/shared';
+import { generateArtifactHash, normalizeSubtitleToWebVTT } from '@stremio-ai-subs/shared';
 import { BUCKET_NAME, s3PresignClient } from '../storage';
 import { translateQueue, sourceFetchQueue } from '../queue';
 
@@ -732,19 +729,23 @@ export async function ensureAddonSubtitle(
         // Fall through — translate worker will try to fetch from subtitle_sources itself
       }
 
-      await translateQueue.add('translate', {
-        sourceSubtitle: sourceSubtitle || `s3://${BUCKET_NAME}/${englishSource.storageKey}`,
-        sourceLang: 'en',
-        targetLang: dstLang,
-        model,
-        artifactHash,
-        srcRegistry,
-        srcId,
-      }, {
-        jobId: artifactHash,
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 10_000 },
-      });
+      await translateQueue.add(
+        'translate',
+        {
+          sourceSubtitle: sourceSubtitle || `s3://${BUCKET_NAME}/${englishSource.storageKey}`,
+          sourceLang: 'en',
+          targetLang: dstLang,
+          model,
+          artifactHash,
+          srcRegistry,
+          srcId,
+        },
+        {
+          jobId: artifactHash,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 10_000 },
+        }
+      );
 
       trace('stage3:done', `Translation job enqueued: ${model} en→${dstLang}`, {
         artifactHash,

@@ -89,7 +89,10 @@ export async function sourceFetchProcessor(job: Job, deps?: { translateQueue?: Q
 
     if (!resolved.ok) {
       job.log(
-        `source-fetch: no subtitle for lang=${lang}: ${resolved.reason} (errors=${resolved.errors.map((e) => `${e.provider}:${e.message}`).slice(0, 3).join(' | ')})`
+        `source-fetch: no subtitle for lang=${lang}: ${resolved.reason} (errors=${resolved.errors
+          .map((e) => `${e.provider}:${e.message}`)
+          .slice(0, 3)
+          .join(' | ')})`
       );
 
       // Record negative cache
@@ -219,7 +222,14 @@ export async function sourceFetchProcessor(job: Job, deps?: { translateQueue?: Q
       );
 
       // Mark scrape_requests as completed
-      await markScrapeStatus(srcRegistry, srcId, dstLang, 'completed', null, resolved.value.provider);
+      await markScrapeStatus(
+        srcRegistry,
+        srcId,
+        dstLang,
+        'completed',
+        null,
+        resolved.value.provider
+      );
 
       job.log(`source-fetch: direct import artifact stored at ${artifactStorageKey}`);
       return { status: 'completed', purpose: 'direct_import', artifactHash, sourceStorageKey };
@@ -276,7 +286,14 @@ export async function sourceFetchProcessor(job: Job, deps?: { translateQueue?: Q
       );
 
       // Mark scrape as completed (source fetched successfully)
-      await markScrapeStatus(srcRegistry, srcId, dstLang, 'completed', null, resolved.value.provider);
+      await markScrapeStatus(
+        srcRegistry,
+        srcId,
+        dstLang,
+        'completed',
+        null,
+        resolved.value.provider
+      );
 
       job.log(
         `source-fetch: enqueued translate job ${model} en→${dstLang} (artifactHash=${artifactHash})`
@@ -293,7 +310,13 @@ export async function sourceFetchProcessor(job: Job, deps?: { translateQueue?: Q
   job.log(`source-fetch: no subtitle found from any provider for any language`);
 
   // Mark negative cache for dstLang
-  await markScrapeStatus(srcRegistry, srcId, dstLang, 'not_found', 'No subtitle sources found at any provider');
+  await markScrapeStatus(
+    srcRegistry,
+    srcId,
+    dstLang,
+    'not_found',
+    'No subtitle sources found at any provider'
+  );
 
   return { status: 'not_found' };
 }

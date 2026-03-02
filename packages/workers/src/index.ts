@@ -154,7 +154,12 @@ logger.info('🚀 Workers started successfully');
 // Graceful shutdown
 async function shutdown() {
   logger.info('Shutting down workers...');
-  await Promise.all([ingestWorker.close(), translateWorker.close(), postcheckWorker.close(), sourceFetchWorker.close()]);
+  await Promise.all([
+    ingestWorker.close(),
+    translateWorker.close(),
+    postcheckWorker.close(),
+    sourceFetchWorker.close(),
+  ]);
   await connection.quit();
   await db.end();
   process.exit(0);
