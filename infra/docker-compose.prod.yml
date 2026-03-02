@@ -74,6 +74,7 @@ services:
       S3_BUCKET: ${S3_BUCKET:-stremio-ai-subs}
       S3_REGION: ${S3_REGION:-us-east-1}
       CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required}
+      ADDON_PUBLIC_URL: ${ADDON_PUBLIC_URL:-https://addon.globalsubs-ai.com}
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
       APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
@@ -141,6 +142,7 @@ services:
       S3_BUCKET: ${S3_BUCKET:-stremio-ai-subs}
       S3_REGION: ${S3_REGION:-us-east-1}
       API_URL: http://api:3001
+      ADDON_PUBLIC_URL: ${ADDON_PUBLIC_URL:-https://addon.globalsubs-ai.com}
     networks:
       - internal
     logging:
@@ -188,7 +190,8 @@ services:
       dockerfile: packages/web/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
-        NEXT_PUBLIC_ADDON_URL: ${NEXT_PUBLIC_ADDON_URL:-http://localhost:7000}
+        NEXT_PUBLIC_ADDON_URL: ${NEXT_PUBLIC_ADDON_URL:-https://addon.globalsubs-ai.com}
+        NEXT_PUBLIC_ADDON_MANIFEST_URL: ${NEXT_PUBLIC_ADDON_MANIFEST_URL:-https://addon.globalsubs-ai.com/manifest.json}
         NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID:-}
     container_name: globalsubs-web
     restart: unless-stopped
