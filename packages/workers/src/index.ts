@@ -5,6 +5,7 @@ import pino from 'pino';
 import { ingestSubtitleProcessor } from './processors/ingest';
 import { translateSubtitleProcessor } from './processors/translate';
 import { postcheckSubtitleProcessor } from './processors/postcheck';
+import { sourceFetchProcessor } from './processors/source-fetch';
 import { db } from './db';
 
 const logger = pino({
@@ -58,6 +59,15 @@ export const postcheckQueue = new Queue('postcheck', {
   },
 });
 
+export const sourceFetchQueue = new Queue('source-fetch', {
+  connection,
+  defaultJobOptions: {
+    ...defaultJobOptions,
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 15_000 },
+  },
+});
+
 // Worker defaults for stall detection
 const workerDefaults = {
   lockDuration: 300_000, // 5 min lock per job
@@ -83,6 +93,17 @@ const postcheckWorker = new Worker('postcheck', postcheckSubtitleProcessor, {
   concurrency: 10,
   ...workerDefaults,
 });
+
+const sourceFetchWorker = new Worker(
+  'source-fetch',
+  async (job) => sourceFetchProcessor(job, { translateQueue }),
+  {
+    connection,
+    concurrency: 5,
+    ...workerDefaults,
+    lockDuration: 60_000, // 60s — provider calls can be slow
+  }
+);
 
 // Event listeners
 ingestWorker.on('completed', (job) => {
@@ -120,12 +141,20 @@ postcheckWorker.on('failed', (job, err) => {
   logger.error({ jobId: job?.id, error: err.message }, 'Postcheck job failed');
 });
 
+sourceFetchWorker.on('completed', (job) => {
+  logger.info({ jobId: job.id }, 'Source-fetch job completed');
+});
+
+sourceFetchWorker.on('failed', (job, err) => {
+  logger.error({ jobId: job?.id, error: err.message }, 'Source-fetch job failed');
+});
+
 logger.info('🚀 Workers started successfully');
 
 // Graceful shutdown
 async function shutdown() {
   logger.info('Shutting down workers...');
-  await Promise.all([ingestWorker.close(), translateWorker.close(), postcheckWorker.close()]);
+  await Promise.all([ingestWorker.close(), translateWorker.close(), postcheckWorker.close(), sourceFetchWorker.close()]);
   await connection.quit();
   await db.end();
   process.exit(0);

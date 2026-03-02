@@ -8,6 +8,7 @@ import {
   postcheckQueue,
   scrapeQueue,
   scrapeTickQueue,
+  sourceFetchQueue,
   translateQueue,
 } from '../queue';
 
@@ -74,6 +75,7 @@ export async function internalQueuesRoutes(fastify: FastifyInstance) {
       new BullMQAdapter(translateQueue) as unknown as never,
       new BullMQAdapter(ingestQueue) as unknown as never,
       new BullMQAdapter(postcheckQueue) as unknown as never,
+      new BullMQAdapter(sourceFetchQueue) as unknown as never,
       new BullMQAdapter(scrapeTickQueue) as unknown as never,
       new BullMQAdapter(scrapeQueue) as unknown as never,
     ],

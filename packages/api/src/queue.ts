@@ -15,3 +15,4 @@ export const postcheckQueue = new Queue('postcheck', { connection: redisConnecti
 
 export const scrapeTickQueue = new Queue('scrape-tick', { connection: redisConnection });
 export const scrapeQueue = new Queue('scrape', { connection: redisConnection });
+export const sourceFetchQueue = new Queue('source-fetch', { connection: redisConnection });
