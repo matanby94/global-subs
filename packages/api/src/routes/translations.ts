@@ -107,14 +107,19 @@ export async function translationsRoutes(fastify: FastifyInstance) {
         );
       } else {
         // Subscriber: log zero-cost transaction for audit trail
-        const walletResult = await client.query(
-          'SELECT id FROM wallets WHERE user_id = $1',
-          [user.userId]
-        );
+        const walletResult = await client.query('SELECT id FROM wallets WHERE user_id = $1', [
+          user.userId,
+        ]);
         if (walletResult.rows.length > 0) {
           await client.query(
             'INSERT INTO credit_transactions (user_id, wallet_id, delta, reason, reference) VALUES ($1, $2, $3, $4, $5)',
-            [user.userId, walletResult.rows[0].id, 0, 'Subscription translation (unlimited)', artifactHash]
+            [
+              user.userId,
+              walletResult.rows[0].id,
+              0,
+              'Subscription translation (unlimited)',
+              artifactHash,
+            ]
           );
         }
       }
@@ -188,7 +193,7 @@ export async function translationsRoutes(fastify: FastifyInstance) {
     });
   });
 
-  // List user's translations
+  // List user's translations (from web UI serve_events)
   fastify.get('/list', { preHandler: authenticateUser }, async (request, reply) => {
     const user = request.user as { userId: string };
 
@@ -209,5 +214,114 @@ export async function translationsRoutes(fastify: FastifyInstance) {
     );
 
     return reply.send({ translations: result.rows });
+  });
+
+  // ──────────────────────────────────────────────
+  // Unified library: combines addon translations (user_library) with
+  // web UI translations (serve_events), all joined to artifacts.
+  // ──────────────────────────────────────────────
+  fastify.get('/library', { preHandler: authenticateUser }, async (request, reply) => {
+    const user = request.user as { userId: string };
+
+    // Query 1: Addon-originated translations from user_library
+    // library_key format: "imdb|tt1234567|es" → parse out src_id and dst_lang
+    // Join with artifacts to get full metadata.
+    const addonResult = await fastify.db.query(
+      `SELECT
+         ul.library_key,
+         ul.created_at,
+         a.hash        AS artifact_hash,
+         a.src_registry,
+         a.src_id,
+         a.src_lang,
+         a.dst_lang,
+         a.model,
+         a.storage_key,
+         tr.status      AS request_status,
+         'addon'        AS source
+       FROM user_library ul
+       LEFT JOIN artifacts a
+         ON a.src_registry = split_part(ul.library_key, '|', 1)
+         AND a.src_id      = split_part(ul.library_key, '|', 2)
+         AND a.dst_lang    = split_part(ul.library_key, '|', 3)
+       LEFT JOIN translation_requests tr
+         ON tr.user_id = ul.user_id
+         AND tr.artifact_hash = a.hash
+       WHERE ul.user_id = $1
+       ORDER BY ul.created_at DESC
+       LIMIT 100`,
+      [user.userId]
+    );
+
+    // Query 2: Web UI translations from serve_events (not already in addon results)
+    const webResult = await fastify.db.query(
+      `SELECT DISTINCT ON (se.artifact_hash)
+         se.artifact_hash,
+         a.src_registry,
+         a.src_id,
+         a.src_lang,
+         a.dst_lang,
+         a.model,
+         a.storage_key,
+         se.served_at   AS created_at,
+         'completed'    AS request_status,
+         'web'          AS source
+       FROM serve_events se
+       JOIN artifacts a ON a.hash = se.artifact_hash
+       WHERE se.user_id = $1
+       ORDER BY se.artifact_hash, se.served_at DESC
+       LIMIT 100`,
+      [user.userId]
+    );
+
+    // Merge and deduplicate by (src_id + dst_lang) — addon entries take priority
+    const seen = new Set<string>();
+    const items: Array<Record<string, unknown>> = [];
+
+    for (const row of addonResult.rows) {
+      const parts = (row.library_key as string).split('|');
+      const dedup = `${parts[1]}|${parts[2]}`;
+      if (seen.has(dedup)) continue;
+      seen.add(dedup);
+
+      items.push({
+        src_registry: row.src_registry || parts[0],
+        src_id: row.src_id || parts[1],
+        dst_lang: row.dst_lang || parts[2],
+        src_lang: row.src_lang || null,
+        model: row.model || null,
+        artifact_hash: row.artifact_hash || null,
+        status: row.artifact_hash ? 'completed' : row.request_status || 'processing',
+        source: row.source,
+        created_at: row.created_at,
+      });
+    }
+
+    for (const row of webResult.rows) {
+      const dedup = `${row.src_id}|${row.dst_lang}`;
+      if (seen.has(dedup)) continue;
+      seen.add(dedup);
+
+      items.push({
+        src_registry: row.src_registry,
+        src_id: row.src_id,
+        dst_lang: row.dst_lang,
+        src_lang: row.src_lang,
+        model: row.model,
+        artifact_hash: row.artifact_hash,
+        status: 'completed',
+        source: row.source,
+        created_at: row.created_at,
+      });
+    }
+
+    // Sort by created_at descending
+    items.sort((a, b) => {
+      const da = a.created_at ? new Date(a.created_at as string).getTime() : 0;
+      const db = b.created_at ? new Date(b.created_at as string).getTime() : 0;
+      return db - da;
+    });
+
+    return reply.send({ library: items });
   });
 }
