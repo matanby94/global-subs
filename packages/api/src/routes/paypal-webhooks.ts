@@ -72,6 +72,10 @@ export async function paypalWebhookRoutes(fastify: FastifyInstance) {
         await handleSubscriptionPaymentFailed(fastify, event.resource);
         break;
 
+      case 'PAYMENT.SALE.COMPLETED':
+        await handlePaymentSaleCompleted(fastify, event.resource);
+        break;
+
       default:
         fastify.log.info({ eventType: event.event_type }, 'Unhandled PayPal event type');
     }
@@ -279,4 +283,58 @@ async function handleSubscriptionPaymentFailed(
   );
 
   fastify.log.info({ ppSubId }, 'PayPal subscription payment failed via webhook');
+}
+
+/**
+ * PAYMENT.SALE.COMPLETED — fired on each successful recurring subscription payment.
+ * Updates current_period_end so the subscription doesn't expire after the first 30 days.
+ */
+async function handlePaymentSaleCompleted(
+  fastify: FastifyInstance,
+  resource: Record<string, unknown>
+) {
+  // The resource contains billing_agreement_id which maps to the subscription ID
+  const billingAgreementId = resource.billing_agreement_id as string | undefined;
+  if (!billingAgreementId) {
+    fastify.log.info('PayPal PAYMENT.SALE.COMPLETED has no billing_agreement_id, skipping');
+    return;
+  }
+
+  // Look up the subscription and extend period_end
+  const subResult = await fastify.db.query(
+    'SELECT user_id, current_period_end FROM subscriptions WHERE stripe_subscription_id = $1',
+    [`paypal_${billingAgreementId}`]
+  );
+
+  if (subResult.rows.length === 0) {
+    fastify.log.info({ billingAgreementId }, 'No matching subscription for PayPal renewal');
+    return;
+  }
+
+  // Try to get accurate next_billing_time from PayPal
+  let periodEnd: Date;
+  try {
+    const details = await getSubscriptionDetails(billingAgreementId);
+    periodEnd = details.currentPeriodEnd
+      ? new Date(details.currentPeriodEnd)
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  } catch {
+    periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  }
+
+  await fastify.db.query(
+    `UPDATE subscriptions SET
+       status = 'active',
+       current_period_start = NOW(),
+       current_period_end = $1,
+       cancel_at_period_end = FALSE,
+       updated_at = NOW()
+     WHERE stripe_subscription_id = $2`,
+    [periodEnd, `paypal_${billingAgreementId}`]
+  );
+
+  fastify.log.info(
+    { billingAgreementId, periodEnd: periodEnd.toISOString() },
+    'PayPal subscription renewed via PAYMENT.SALE.COMPLETED'
+  );
 }

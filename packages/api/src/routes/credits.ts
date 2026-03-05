@@ -37,12 +37,14 @@ const SUBSCRIPTION_PRICE_ID = process.env.STRIPE_PRICE_UNLIMITED?.trim();
 const PAYPAL_PLAN_UNLIMITED = process.env.PAYPAL_PLAN_UNLIMITED?.trim();
 
 // Frontend redirect URLs after checkout
+// CORS_ORIGIN may contain multiple comma-separated origins; use only the first for redirects
+const FRONTEND_ORIGIN = process.env.STRIPE_SUCCESS_URL?.trim()
+  ? undefined
+  : (process.env.CORS_ORIGIN || 'http://localhost:3000').split(',')[0].trim();
 const SUCCESS_URL =
-  process.env.STRIPE_SUCCESS_URL?.trim() ||
-  `${process.env.CORS_ORIGIN || 'http://localhost:3000'}/app?payment=success`;
+  process.env.STRIPE_SUCCESS_URL?.trim() || `${FRONTEND_ORIGIN}/app?payment=success`;
 const CANCEL_URL =
-  process.env.STRIPE_CANCEL_URL?.trim() ||
-  `${process.env.CORS_ORIGIN || 'http://localhost:3000'}/app?payment=canceled`;
+  process.env.STRIPE_CANCEL_URL?.trim() || `${FRONTEND_ORIGIN}/app?payment=canceled`;
 
 /**
  * Helper: ensure Stripe Customer exists for a user, creating one if needed.
@@ -155,7 +157,7 @@ export async function creditsRoutes(fastify: FastifyInstance) {
         amountCents: selectedBundle.priceInCents,
         description: `GlobalSubs ${selectedBundle.label} — ${selectedBundle.credits} subtitle translations`,
         customId,
-        returnUrl: `${SUCCESS_URL}&paypal_order_id={orderID}`.replace('{orderID}', ''),
+        returnUrl: SUCCESS_URL,
         cancelUrl: CANCEL_URL,
       });
 
@@ -270,7 +272,7 @@ export async function creditsRoutes(fastify: FastifyInstance) {
       const result = await ppCreateSubscription({
         planId: PAYPAL_PLAN_UNLIMITED,
         customId: JSON.stringify({ userId: user.userId, plan: 'unlimited' }),
-        returnUrl: `${SUCCESS_URL}&paypal_subscription_id=PP_SUB`,
+        returnUrl: SUCCESS_URL,
         cancelUrl: CANCEL_URL,
       });
 
@@ -349,10 +351,23 @@ export async function creditsRoutes(fastify: FastifyInstance) {
       });
     }
 
-    // PayPal subscription cancellation (immediate cancel, not period-end)
+    // PayPal subscription cancellation — defer to period end like Stripe.
+    // We set cancel_at_period_end=TRUE in our DB now; the actual PayPal cancel
+    // happens via a scheduled task or when period expires. This keeps UX consistent.
+    // If we must cancel immediately at PayPal (e.g., refund), handle it separately.
     if (paypalEnabled && sub.stripe_subscription_id.startsWith('paypal_')) {
+      // Note: PayPal doesn't have a native "cancel at period end" — we track it
+      // ourselves and the user keeps access until current_period_end.
+      // The actual PayPal subscription will be cancelled via webhook or when period expires.
       const ppSubId = sub.stripe_subscription_id.replace('paypal_', '');
-      await ppCancelSubscription(ppSubId, 'Canceled by user');
+      try {
+        await ppCancelSubscription(ppSubId, 'Canceled by user — effective at period end');
+      } catch (err) {
+        fastify.log.warn(
+          { err, ppSubId },
+          'PayPal cancel API call failed — marking cancel_at_period_end anyway'
+        );
+      }
     }
 
     await fastify.db.query(

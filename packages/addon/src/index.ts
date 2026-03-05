@@ -3,7 +3,7 @@ import { addonBuilder } from 'stremio-addon-sdk';
 import http from 'node:http';
 import qs from 'node:querystring';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { convertVttToSrt } from '@stremio-ai-subs/shared';
 import { db } from './db';
 
 const PORT = parseInt(process.env.ADDON_PORT || process.env.PORT || '3012', 10);
@@ -32,21 +32,19 @@ const S3_BUCKET = process.env.S3_BUCKET || 'GlobalSubs';
 // ──────────────────────────────────────────────
 // Placeholder VTT shown while translation is in progress.
 // ──────────────────────────────────────────────
-const PLACEHOLDER_VTT = [
-  'WEBVTT',
-  '',
+const PLACEHOLDER_SRT = [
   '1',
-  '00:00:01.000 --> 00:01:00.000',
+  '00:00:01,000 --> 00:01:00,000',
   '🌐 GlobalSubs is translating your subtitles…',
   'Please wait a few minutes and reopen this episode.',
   '',
   '2',
-  '00:01:00.000 --> 00:05:00.000',
+  '00:01:00,000 --> 00:05:00,000',
   '🌐 Translation in progress…',
   'Close and reopen to check if subtitles are ready.',
   '',
   '3',
-  '00:05:00.000 --> 99:59:59.000',
+  '00:05:00,000 --> 99:59:59,000',
   '🌐 Subtitles should be ready by now.',
   'Close and reopen this episode to load them.',
 ].join('\n');
@@ -197,18 +195,31 @@ builder.defineSubtitlesHandler(async (args: unknown) => {
     // even if Stremio caches the subtitle picker entry, the VTT URL
     // is fetched fresh on each play.
     const encodedId = encodeURIComponent(id);
-    const dynamicVttUrl = `${ADDON_PUBLIC_URL}/${addonToken || 'jwt'}/sub/${effectiveDstLang}/${type}/${encodedId}.vtt`;
+    const dynamicSrtUrl = `${ADDON_PUBLIC_URL}/${addonToken || 'jwt'}/sub/${effectiveDstLang}/${type}/${encodedId}.srt`;
 
-    const lang = buildSubtitleLang(effectiveDstLang);
+    const brandedLang = buildSubtitleLang(effectiveDstLang);
 
-    console.log(`[addon] Returning dynamic VTT URL for ${id}: ${dynamicVttUrl}`);
+    console.log(`[addon] Returning dynamic SRT URL for ${id}: ${dynamicSrtUrl}`);
 
+    // Return two subtitle entries pointing to the same SRT URL:
+    //   1. A real ISO 639-1 lang code — Chromecast/cast receivers require
+    //      a recognised code to set up the text track correctly.
+    //   2. A branded non-ISO string ("Hebrew - GlobalSubs") — displayed
+    //      verbatim on desktop Stremio for branding.
+    //
+    // We serve SRT (not VTT) because Chromecast and other embedded
+    // players handle SRT natively, matching what other Stremio addons do.
     return {
       subtitles: [
         {
+          id: `globalsubs-${effectiveDstLang}-iso`,
+          url: dynamicSrtUrl,
+          lang: effectiveDstLang,
+        },
+        {
           id: `globalsubs-${effectiveDstLang}`,
-          url: dynamicVttUrl,
-          lang,
+          url: dynamicSrtUrl,
+          lang: brandedLang,
         },
       ],
       ...NO_CACHE,
@@ -281,18 +292,17 @@ function extractPrefixConfig(pathname: string): {
 }
 
 // ──────────────────────────────────────────────
-// Dynamic /sub endpoint — serves VTT content on every request.
+// Dynamic /sub endpoint — serves SRT subtitle content on every request.
 //
-// URL format: /<token>/sub/<dstLang>/<type>/<stremioId>.vtt
+// URL format: /<token>/sub/<dstLang>/<type>/<stremioId>.srt
 //
-// This is the core of the stremio-core cache bypass: the subtitle
-// picker entry always points here. On each request we query the DB:
-//   • Artifact exists  → 302 redirect to presigned S3 URL
-//   • Still processing → serve placeholder VTT inline (no-cache)
+// Artifacts are stored as VTT in S3. This endpoint converts them to SRT
+// on the fly because Chromecast and most Stremio clients handle SRT
+// natively (matching what other Stremio addons serve).
 //
-// Because the VTT URL is fetched fresh every time Stremio plays,
-// stremio-core's cached subtitle picker entry remains valid — only
-// the VTT content changes dynamically.
+// On each request we query the DB:
+//   • Artifact exists  → fetch VTT from S3, convert to SRT, serve inline
+//   • Still processing → serve placeholder SRT inline (no-cache)
 // ──────────────────────────────────────────────
 async function handleSubEndpoint(
   res: http.ServerResponse,
@@ -324,41 +334,58 @@ async function handleSubEndpoint(
       const hash = result.rows[0].hash as string;
       const s3Key = `artifacts/${hash}/${hash}.vtt`;
 
-      const signedUrl = await getSignedUrl(
-        s3PresignClient,
-        new GetObjectCommand({ Bucket: S3_BUCKET, Key: s3Key }),
-        { expiresIn: 3600 }
-      );
+      try {
+        const s3Response = await s3PresignClient.send(
+          new GetObjectCommand({ Bucket: S3_BUCKET, Key: s3Key })
+        );
 
-      console.log(`[addon/sub] Artifact found for ${srcId} (${dstLang}), redirecting to S3`);
-      res.writeHead(302, {
-        location: signedUrl,
-        'cache-control': 'no-cache, no-store, must-revalidate',
-        'access-control-allow-origin': '*',
-      });
-      res.end();
-      return;
+        if (s3Response.Body) {
+          // Read the full VTT body and convert to SRT
+          const chunks: Buffer[] = [];
+          const bodyStream = s3Response.Body as import('node:stream').Readable;
+          for await (const chunk of bodyStream) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          const vttContent = Buffer.concat(chunks).toString('utf-8');
+          const srtContent = convertVttToSrt(vttContent);
+
+          console.log(`[addon/sub] Artifact found for ${srcId} (${dstLang}), serving as SRT`);
+          res.writeHead(200, {
+            'content-type': 'application/x-subrip; charset=utf-8',
+            'cache-control': 'no-cache, no-store, must-revalidate, max-age=0',
+            pragma: 'no-cache',
+            expires: '0',
+            'access-control-allow-origin': '*',
+            'content-length': String(Buffer.byteLength(srtContent, 'utf-8')),
+          });
+          res.end(srtContent);
+          return;
+        }
+      } catch (s3Err) {
+        console.error(`[addon/sub] S3 fetch error for ${s3Key}:`, s3Err);
+        // Fall through to placeholder
+      }
     }
 
-    // No artifact yet — serve placeholder VTT inline.
-    console.log(`[addon/sub] No artifact for ${srcId} (${dstLang}), serving placeholder VTT`);
+    // No artifact yet — serve placeholder SRT inline.
+    console.log(`[addon/sub] No artifact for ${srcId} (${dstLang}), serving placeholder SRT`);
     res.writeHead(200, {
-      'content-type': 'text/vtt; charset=utf-8',
+      'content-type': 'application/x-subrip; charset=utf-8',
       'cache-control': 'no-cache, no-store, must-revalidate, max-age=0',
       pragma: 'no-cache',
       expires: '0',
       'access-control-allow-origin': '*',
     });
-    res.end(PLACEHOLDER_VTT);
+    res.end(PLACEHOLDER_SRT);
   } catch (err) {
     console.error('[addon/sub] DB query error:', err);
     // On error, still serve the placeholder so Stremio doesn't break.
     res.writeHead(200, {
-      'content-type': 'text/vtt; charset=utf-8',
+      'content-type': 'application/x-subrip; charset=utf-8',
       'cache-control': 'no-cache, no-store, must-revalidate',
       'access-control-allow-origin': '*',
     });
-    res.end(PLACEHOLDER_VTT);
+    res.end(PLACEHOLDER_SRT);
   }
 }
 
@@ -376,12 +403,18 @@ async function handleAddonRequest(req: http.IncomingMessage, res: http.ServerRes
   }
 
   // ──────────────────────────────────────────────
-  // /sub/:dstLang/:type/:stremioId.vtt — dynamic VTT endpoint
+  // /sub/:dstLang/:type/:stremioId.srt — dynamic SRT endpoint
+  // (also accepts .vtt for backward compat)
   // ──────────────────────────────────────────────
-  if (parts[0] === 'sub' && parts.length === 4 && parts[3].endsWith('.vtt')) {
+  if (
+    parts[0] === 'sub' &&
+    parts.length === 4 &&
+    (parts[3].endsWith('.srt') || parts[3].endsWith('.vtt'))
+  ) {
     const dstLang = parts[1];
     const type = parts[2];
-    let stremioId = parts[3].slice(0, -4); // strip .vtt
+    const ext = parts[3].endsWith('.srt') ? '.srt' : '.vtt';
+    let stremioId = parts[3].slice(0, -ext.length);
     try {
       stremioId = decodeURIComponent(stremioId);
     } catch {

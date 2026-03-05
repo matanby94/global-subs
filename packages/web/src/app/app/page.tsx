@@ -207,8 +207,13 @@ export default function AppPage() {
 
     if (payment === 'success') {
       // Check if returning from PayPal and need to capture
-      const ppOrderId = params.get('paypal_order_id');
-      const ppSubId = params.get('paypal_subscription_id');
+      const ppOrderId = params.get('paypal_order_id') || params.get('token');
+      const ppSubId = params.get('paypal_subscription_id') || params.get('subscription_id');
+
+      if ((ppOrderId || ppSubId) && !accessToken) {
+        // accessToken not ready yet — wait for next render (don't clear URL params yet)
+        return;
+      }
 
       if ((ppOrderId || ppSubId) && accessToken) {
         // Capture PayPal payment/subscription
@@ -221,11 +226,12 @@ export default function AppPage() {
             );
           } catch { /* webhook will handle as backup */ }
           refreshUser();
+          window.history.replaceState({}, '', '/app');
         })();
       } else {
         refreshUser();
+        window.history.replaceState({}, '', '/app');
       }
-      window.history.replaceState({}, '', '/app');
     } else if (payment === 'canceled') {
       window.history.replaceState({}, '', '/app');
     }

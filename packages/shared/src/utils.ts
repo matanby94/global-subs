@@ -449,6 +449,91 @@ function convertAssToVtt(input: string): {
   return { vtt: normalizeWebVTT(out.join('\n')) + '\n', warnings, format };
 }
 
+/**
+ * Convert a WEBVTT string to SRT format.
+ * SRT uses comma as millisecond separator and sequential cue numbering.
+ */
+export function convertVttToSrt(vtt: string): string {
+  const raw = stripUtf8Bom(vtt).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lines = raw.split('\n');
+
+  const cues: Array<{ start: string; end: string; settings: string; text: string[] }> = [];
+  let i = 0;
+
+  // Skip WEBVTT header and any header comment block
+  if (/^\s*WEBVTT/i.test(lines[0] || '')) {
+    i = 1;
+    // Skip any header metadata lines until first blank line
+    while (i < lines.length && lines[i].trim() !== '') i++;
+  }
+
+  while (i < lines.length) {
+    // Skip blank lines
+    while (i < lines.length && lines[i].trim() === '') i++;
+    if (i >= lines.length) break;
+
+    // Check if this line is a timing line
+    let timingLine = lines[i].trim();
+    const timingMatch = timingLine.match(
+      /^(\d{1,2}:\d{2}:\d{2}[.,]\d{3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[.,]\d{3})(.*?)$/
+    );
+
+    if (!timingMatch) {
+      // Might be a cue identifier — skip it and check next line
+      i++;
+      if (i >= lines.length) break;
+      timingLine = lines[i].trim();
+      const tm2 = timingLine.match(
+        /^(\d{1,2}:\d{2}:\d{2}[.,]\d{3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[.,]\d{3})(.*?)$/
+      );
+      if (!tm2) continue;
+      // Use this timing
+      const start = vttTimeToSrt(tm2[1]);
+      const end = vttTimeToSrt(tm2[2]);
+      i++;
+      const text: string[] = [];
+      while (i < lines.length && lines[i].trim() !== '') {
+        text.push(lines[i]);
+        i++;
+      }
+      cues.push({ start, end, settings: '', text });
+      continue;
+    }
+
+    const start = vttTimeToSrt(timingMatch[1]);
+    const end = vttTimeToSrt(timingMatch[2]);
+    i++;
+
+    const text: string[] = [];
+    while (i < lines.length && lines[i].trim() !== '') {
+      text.push(lines[i]);
+      i++;
+    }
+    cues.push({ start, end, settings: '', text });
+  }
+
+  const out: string[] = [];
+  for (let c = 0; c < cues.length; c++) {
+    const cue = cues[c];
+    out.push(String(c + 1));
+    out.push(`${cue.start} --> ${cue.end}`);
+    out.push(...cue.text);
+    out.push('');
+  }
+
+  return out.join('\n');
+}
+
+function vttTimeToSrt(time: string): string {
+  // 00:00:01.234 -> 00:00:01,234
+  // Also ensure HH:MM:SS format (VTT can have MM:SS.mmm)
+  const normalized = time.replace('.', ',');
+  if (/^\d{2}:\d{2},\d{3}$/.test(normalized)) {
+    return `00:${normalized}`;
+  }
+  return normalized;
+}
+
 export function normalizeSubtitleToWebVTT(input: string): {
   vtt: string;
   format: SubtitleFormat;
