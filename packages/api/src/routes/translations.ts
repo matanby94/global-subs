@@ -5,6 +5,7 @@ import { generateArtifactHash } from '@stremio-ai-subs/shared';
 import { AppError } from '../lib/app-error';
 import { ingestQueue } from '../queue';
 import { hasActiveSubscription } from './credits';
+import { ensureAddonSubtitle } from '../lib/ensure-addon';
 
 // Models that actually have working adapters
 const SUPPORTED_MODELS = new Set(['gpt-4']);
@@ -230,6 +231,8 @@ export async function translationsRoutes(fastify: FastifyInstance) {
       `SELECT
          ul.library_key,
          ul.created_at,
+         ul.retry_count,
+         ul.last_retry_at,
          a.hash        AS artifact_hash,
          a.src_registry,
          a.src_id,
@@ -238,7 +241,7 @@ export async function translationsRoutes(fastify: FastifyInstance) {
          a.model,
          a.storage_key,
          tr.status      AS request_status,
-         'addon'        AS source
+         sr.status      AS scrape_status
        FROM user_library ul
        LEFT JOIN artifacts a
          ON a.src_registry = split_part(ul.library_key, '|', 1)
@@ -247,6 +250,10 @@ export async function translationsRoutes(fastify: FastifyInstance) {
        LEFT JOIN translation_requests tr
          ON tr.user_id = ul.user_id
          AND tr.artifact_hash = a.hash
+       LEFT JOIN scrape_requests sr
+         ON sr.src_registry = split_part(ul.library_key, '|', 1)
+         AND sr.src_id      = split_part(ul.library_key, '|', 2)
+         AND sr.lang        = split_part(ul.library_key, '|', 3)
        WHERE ul.user_id = $1
        ORDER BY ul.created_at DESC
        LIMIT 100`,
@@ -264,8 +271,7 @@ export async function translationsRoutes(fastify: FastifyInstance) {
          a.model,
          a.storage_key,
          se.served_at   AS created_at,
-         'completed'    AS request_status,
-         'web'          AS source
+         'completed'    AS request_status
        FROM serve_events se
        JOIN artifacts a ON a.hash = se.artifact_hash
        WHERE se.user_id = $1
@@ -284,6 +290,22 @@ export async function translationsRoutes(fastify: FastifyInstance) {
       if (seen.has(dedup)) continue;
       seen.add(dedup);
 
+      // Determine effective status:
+      // 1. If artifact exists → completed
+      // 2. If translation_requests says failed → failed
+      // 3. If scrape_requests says failed/not_found → failed
+      // 4. Otherwise → processing
+      let status = 'processing';
+      if (row.artifact_hash) {
+        status = 'completed';
+      } else if (row.request_status === 'failed') {
+        status = 'failed';
+      } else if (row.scrape_status === 'failed' || row.scrape_status === 'not_found') {
+        status = 'failed';
+      } else if (row.request_status) {
+        status = row.request_status;
+      }
+
       items.push({
         src_registry: row.src_registry || parts[0],
         src_id: row.src_id || parts[1],
@@ -291,9 +313,10 @@ export async function translationsRoutes(fastify: FastifyInstance) {
         src_lang: row.src_lang || null,
         model: row.model || null,
         artifact_hash: row.artifact_hash || null,
-        status: row.artifact_hash ? 'completed' : row.request_status || 'processing',
-        source: row.source,
+        status,
         created_at: row.created_at,
+        library_key: row.library_key,
+        retry_count: row.retry_count ?? 0,
       });
     }
 
@@ -310,7 +333,6 @@ export async function translationsRoutes(fastify: FastifyInstance) {
         model: row.model,
         artifact_hash: row.artifact_hash,
         status: 'completed',
-        source: row.source,
         created_at: row.created_at,
       });
     }
@@ -323,5 +345,126 @@ export async function translationsRoutes(fastify: FastifyInstance) {
     });
 
     return reply.send({ library: items });
+  });
+
+  // ──────────────────────────────────────────────
+  // Retry a stuck processing library item.
+  // Conditions: >1 min since last attempt, max 2 retries.
+  // Re-invokes the ensureAddonSubtitle pipeline.
+  // ──────────────────────────────────────────────
+  fastify.post('/library/retry', { preHandler: authenticateUser }, async (request, reply) => {
+    const user = request.user as { userId: string };
+    const { library_key } = request.body as { library_key?: string };
+
+    if (!library_key || typeof library_key !== 'string') {
+      throw AppError.badRequest('library_key is required');
+    }
+
+    const parts = library_key.split('|');
+    if (parts.length !== 3) {
+      throw AppError.badRequest('Invalid library_key format');
+    }
+    const [srcRegistry, srcId, dstLang] = parts;
+
+    // 1. Verify ownership and read retry state from user_library
+    const ownerCheck = await fastify.db.query(
+      'SELECT created_at, retry_count, last_retry_at FROM user_library WHERE user_id = $1 AND library_key = $2',
+      [user.userId, library_key]
+    );
+    if (ownerCheck.rows.length === 0) {
+      throw AppError.notFound('Library item not found');
+    }
+
+    const row = ownerCheck.rows[0];
+    const retryCount: number = row.retry_count ?? 0;
+
+    // 2. Check that no artifact already exists (already completed)
+    const artifactCheck = await fastify.db.query(
+      'SELECT 1 FROM artifacts WHERE src_registry = $1 AND src_id = $2 AND dst_lang = $3 LIMIT 1',
+      [srcRegistry, srcId, dstLang]
+    );
+    if (artifactCheck.rows.length > 0) {
+      return reply.send({ status: 'already_completed', retryCount: 0 });
+    }
+
+    // 3. Only allow retry when the pipeline has actually failed
+    //    Check translation_requests and scrape_requests for failure status
+    const failCheck = await fastify.db.query(
+      `SELECT
+         (SELECT status FROM translation_requests
+          WHERE user_id = $1 AND request_meta->>'srcId' = $2 AND request_meta->>'dstLang' = $3
+          ORDER BY updated_at DESC LIMIT 1) AS tr_status,
+         (SELECT status FROM scrape_requests
+          WHERE src_registry = $4 AND src_id = $2 AND lang = $3
+          ORDER BY updated_at DESC LIMIT 1) AS sr_status`,
+      [user.userId, srcId, dstLang, srcRegistry]
+    );
+
+    const trStatus = failCheck.rows[0]?.tr_status;
+    const srStatus = failCheck.rows[0]?.sr_status;
+    const isFailed =
+      trStatus === 'failed' ||
+      srStatus === 'failed' ||
+      srStatus === 'not_found' ||
+      // No pipeline state at all and no artifact → stuck/lost, allow retry
+      (!trStatus && !srStatus);
+
+    if (!isFailed) {
+      return reply.status(400).send({
+        error: 'Translation is still being processed',
+        retryCount,
+      });
+    }
+
+    // 4. Enforce max 2 retries
+    if (retryCount >= 2) {
+      return reply.status(400).send({ error: 'Maximum retries reached (2)', retryCount });
+    }
+
+    // 5. Atomically increment retry_count and stamp last_retry_at BEFORE
+    //    running the pipeline so a concurrent retry is blocked.
+    const newRetryCount = retryCount + 1;
+    await fastify.db.query(
+      `UPDATE user_library
+       SET retry_count = $1, last_retry_at = NOW()
+       WHERE user_id = $2 AND library_key = $3`,
+      [newRetryCount, user.userId, library_key]
+    );
+
+    // 6. Clean up stale pipeline state so the ensure pipeline can re-run
+    await fastify.db
+      .query(
+        `DELETE FROM translation_requests
+       WHERE user_id = $1
+         AND request_meta->>'srcId' = $2
+         AND request_meta->>'dstLang' = $3`,
+        [user.userId, srcId, dstLang]
+      )
+      .catch(() => undefined);
+
+    await fastify.db
+      .query(
+        `UPDATE scrape_requests
+       SET status = 'failed', updated_at = NOW()
+       WHERE src_registry = $1 AND src_id = $2 AND lang = $3
+         AND status IN ('pending', 'processing')`,
+        [srcRegistry, srcId, dstLang]
+      )
+      .catch(() => undefined);
+
+    // 7. Re-invoke the ensure pipeline (won't re-charge — user_library ON CONFLICT)
+    const type = srcId.includes(':') ? 'series' : 'movie';
+    const result = await ensureAddonSubtitle(fastify, {
+      userId: user.userId,
+      type,
+      stremioId: srcId,
+      dstLang,
+    });
+
+    return reply.send({
+      status: result.body.status,
+      retryCount: newRetryCount,
+      artifactHash: result.body.artifactHash || null,
+    });
   });
 }

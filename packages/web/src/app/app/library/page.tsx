@@ -16,8 +16,9 @@ type LibraryItem = {
     model: string | null;
     artifact_hash: string | null;
     status: string;
-    source: 'addon' | 'web';
     created_at: string;
+    library_key?: string;
+    retry_count?: number;
 };
 
 function langName(code: string): string {
@@ -67,28 +68,6 @@ function StatusBadge({ status }: { status: string }) {
     );
 }
 
-function SourceBadge({ source }: { source: 'addon' | 'web' }) {
-    if (source === 'addon') {
-        return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-600 border border-purple-200/50">
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.91 11.672a.375.375 0 010 .656l-5.603 3.113a.375.375 0 01-.557-.328V8.887c0-.286.307-.466.557-.327l5.603 3.112z" />
-                </svg>
-                Stremio
-            </span>
-        );
-    }
-    return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600 border border-blue-200/50">
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
-            </svg>
-            Web
-        </span>
-    );
-}
-
 function formatImdbId(srcId: string): string {
     // For series: "tt1234567:1:3" → "tt1234567 S01E03"
     const parts = srcId.split(':');
@@ -105,6 +84,7 @@ export default function LibraryPage() {
     const [items, setItems] = useState<LibraryItem[]>([]);
     const [fetching, setFetching] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [retrying, setRetrying] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         if (!loading && !user) {
@@ -127,6 +107,51 @@ export default function LibraryPage() {
             })
             .finally(() => setFetching(false));
     }, [accessToken]);
+
+    function canRetry(item: LibraryItem): boolean {
+        if (item.status !== 'failed') return false;
+        const retryCount = item.retry_count ?? 0;
+        return retryCount < 2;
+    }
+
+    async function handleRetry(item: LibraryItem) {
+        if (!accessToken || !item.library_key) return;
+        const key = item.library_key;
+        setRetrying((prev) => new Set(prev).add(key));
+        try {
+            const res = await axios.post(
+                `${API_URL}/api/translations/library/retry`,
+                { library_key: key },
+                { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
+            // Update the item in-place
+            setItems((prev) =>
+                prev.map((it) =>
+                    it.library_key === key
+                        ? {
+                            ...it,
+                            status: res.data.status || 'processing',
+                            retry_count: res.data.retryCount ?? (it.retry_count ?? 0) + 1,
+                            artifact_hash: res.data.artifactHash || it.artifact_hash,
+                        }
+                        : it
+                )
+            );
+        } catch (err: unknown) {
+            const msg =
+                axios.isAxiosError(err) && err.response?.data?.error
+                    ? err.response.data.error
+                    : 'Retry failed';
+            setError(msg);
+            setTimeout(() => setError(null), 4000);
+        } finally {
+            setRetrying((prev) => {
+                const next = new Set(prev);
+                next.delete(key);
+                return next;
+            });
+        }
+    }
 
     return (
         <div className="min-h-screen bg-white">
@@ -233,7 +258,6 @@ export default function LibraryPage() {
                                                 {formatImdbId(item.src_id)}
                                             </span>
                                             <StatusBadge status={item.status} />
-                                            <SourceBadge source={item.source} />
                                         </div>
                                         <div className="flex items-center gap-3 text-xs text-gray-400">
                                             <span className="flex items-center gap-1">
@@ -267,6 +291,30 @@ export default function LibraryPage() {
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                                             </svg>
                                         </a>
+                                    )}
+                                    {item.status !== 'completed' && canRetry(item) && (
+                                        <button
+                                            onClick={() => handleRetry(item)}
+                                            disabled={retrying.has(item.library_key || '')}
+                                            className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            title={`Retry translation (${2 - (item.retry_count ?? 0)} remaining)`}
+                                        >
+                                            {retrying.has(item.library_key || '') ? (
+                                                <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                                                </svg>
+                                            ) : (
+                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                                                </svg>
+                                            )}
+                                            Retry
+                                        </button>
+                                    )}
+                                    {item.status !== 'completed' && (item.retry_count ?? 0) >= 2 && (
+                                        <span className="flex-shrink-0 text-xs text-gray-400">
+                                            Max retries reached
+                                        </span>
                                     )}
                                 </div>
                             </motion.div>
