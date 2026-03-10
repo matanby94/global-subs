@@ -24,6 +24,12 @@ const stripe = STRIPE_SECRET_KEY
   : null;
 const isSandbox = !stripe;
 
+// ── Public business details (statement descriptors & support) ─
+const STATEMENT_DESCRIPTOR = process.env.STRIPE_STATEMENT_DESCRIPTOR?.trim() || undefined;
+const SHORTENED_DESCRIPTOR = process.env.STRIPE_SHORTENED_DESCRIPTOR?.trim() || undefined;
+const SUPPORT_PHONE = process.env.STRIPE_SUPPORT_PHONE?.trim() || undefined;
+const SUPPORT_URL = process.env.STRIPE_SUPPORT_URL?.trim() || undefined;
+
 // ── Bundle definitions ───────────────────────────────────
 export const BUNDLES = {
   pack50: { credits: 50, priceInCents: 900, label: '50 Pack' },
@@ -68,6 +74,7 @@ async function ensureStripeCustomer(fastify: FastifyInstance, userId: string): P
   const customer = await stripe.customers.create({
     email: user.email,
     name: user.name || undefined,
+    phone: SUPPORT_PHONE || undefined,
     metadata: { userId },
   });
 
@@ -175,6 +182,10 @@ export async function creditsRoutes(fastify: FastifyInstance) {
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         mode: 'payment',
+        payment_intent_data: {
+          ...(STATEMENT_DESCRIPTOR && { statement_descriptor: STATEMENT_DESCRIPTOR }),
+          ...(SHORTENED_DESCRIPTOR && { statement_descriptor_suffix: SHORTENED_DESCRIPTOR }),
+        },
         line_items: [
           {
             price_data: {
@@ -289,6 +300,9 @@ export async function creditsRoutes(fastify: FastifyInstance) {
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         mode: 'subscription',
+        subscription_data: {
+          ...(STATEMENT_DESCRIPTOR && { description: STATEMENT_DESCRIPTOR }),
+        },
         line_items: [{ price: SUBSCRIPTION_PRICE_ID, quantity: 1 }],
         metadata: {
           userId: user.userId,
@@ -475,6 +489,11 @@ export async function creditsRoutes(fastify: FastifyInstance) {
         interval: 'month',
       },
       paymentProviders: providers,
+      ...(STATEMENT_DESCRIPTOR && { statementDescriptor: STATEMENT_DESCRIPTOR }),
+      support: {
+        ...(SUPPORT_PHONE && { phone: SUPPORT_PHONE }),
+        ...(SUPPORT_URL && { url: SUPPORT_URL }),
+      },
     });
   });
 

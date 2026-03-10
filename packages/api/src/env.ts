@@ -54,6 +54,10 @@ const envSchema = z.object({
   STRIPE_PRICE_PACK50: z.string().optional(),
   STRIPE_PRICE_PACK100: z.string().optional(),
   STRIPE_PRICE_UNLIMITED: z.string().optional(),
+  STRIPE_STATEMENT_DESCRIPTOR: z.string().min(5).max(22).optional(),
+  STRIPE_SHORTENED_DESCRIPTOR: z.string().min(2).max(10).optional(),
+  STRIPE_SUPPORT_PHONE: z.string().optional(),
+  STRIPE_SUPPORT_URL: z.string().url().optional(),
 
   // PayPal (optional - disabled when not set)
   PAYPAL_CLIENT_ID: z.string().optional(),
