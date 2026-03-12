@@ -748,23 +748,7 @@ export default function AppPage() {
                       </div>
                     </div>
 
-                    {/* Pay with Card (Stripe) */}
-                    <button
-                      onClick={() => handlePurchase(selectedPlan, 'stripe')}
-                      disabled={!!purchaseLoading}
-                      className="w-full flex items-center justify-center gap-3 bg-gray-900 hover:bg-gray-800 text-white rounded-xl py-3.5 px-4 transition-all duration-200 disabled:opacity-50 font-medium text-sm"
-                    >
-                      {purchaseLoading === `${selectedPlan}_stripe` ? (
-                        <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                      ) : (
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
-                        </svg>
-                      )}
-                      Pay with Card
-                    </button>
-
-                    {/* Pay with PayPal */}
+                    {/* Pay with PayPal (supports card + PayPal account) */}
                     <button
                       onClick={() => handlePurchase(selectedPlan, 'paypal')}
                       disabled={!!purchaseLoading}
@@ -777,7 +761,7 @@ export default function AppPage() {
                           <path d="M7.076 21.337H2.47a.641.641 0 01-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797H9.6c-.564 0-1.04.408-1.13.964L7.076 21.337zm7.38-13.498c-.112.733-.362 1.333-.776 1.794-.61.682-1.627.927-2.883.927h-.525l.698-4.418a.418.418 0 01.413-.356h.242c.88 0 1.713 0 2.14.503.256.3.348.744.253 1.55h.438z" />
                         </svg>
                       )}
-                      Pay with PayPal
+                      Pay with Card or PayPal
                     </button>
 
                     <p className="text-center text-xs text-gray-400 pt-1">
