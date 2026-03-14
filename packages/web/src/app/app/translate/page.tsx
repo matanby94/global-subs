@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { trackEvent } from '../../../lib/analytics';
 
 const LANGUAGES = [
     { code: 'es', label: 'Spanish' },
@@ -52,6 +53,7 @@ export default function TranslatePage() {
         if (droppedFile && (droppedFile.name.endsWith('.srt') || droppedFile.name.endsWith('.vtt'))) {
             setFile(droppedFile);
             setUrl('');
+            trackEvent('translate_file_dropped', { fileType: droppedFile.name.split('.').pop() || '', fileSize: droppedFile.size });
         }
     }, []);
 
@@ -69,6 +71,7 @@ export default function TranslatePage() {
         if (selected) {
             setFile(selected);
             setUrl('');
+            trackEvent('translate_file_selected', { fileType: selected.name.split('.').pop() || '', fileSize: selected.size });
         }
     }, []);
 
@@ -159,7 +162,7 @@ export default function TranslatePage() {
                                             <p className="text-xs text-gray-400">{(file.size / 1024).toFixed(1)} KB</p>
                                         </div>
                                         <button
-                                            onClick={(e) => { e.stopPropagation(); setFile(null); }}
+                                            onClick={(e) => { e.stopPropagation(); setFile(null); trackEvent('translate_file_removed'); }}
                                             className="text-xs text-red-400 hover:text-red-600 font-medium mt-1"
                                         >
                                             Remove file
@@ -204,6 +207,7 @@ export default function TranslatePage() {
                                 type="url"
                                 value={url}
                                 onChange={(e) => { setUrl(e.target.value); if (e.target.value) setFile(null); }}
+                                onBlur={() => { if (url.trim()) trackEvent('translate_url_entered'); }}
                                 placeholder="https://example.com/subtitle.srt"
                                 className="w-full px-4 py-3 bg-white/80 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                             />
@@ -225,7 +229,7 @@ export default function TranslatePage() {
                         <div className="relative">
                             <select
                                 value={targetLang}
-                                onChange={(e) => setTargetLang(e.target.value)}
+                                onChange={(e) => { setTargetLang(e.target.value); trackEvent('translate_lang_selected', { lang: e.target.value }); }}
                                 className="w-full appearance-none px-4 py-3 bg-white/80 border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all pr-10"
                             >
                                 <option value="" disabled>Select a language</option>
@@ -252,7 +256,7 @@ export default function TranslatePage() {
                             {MODELS.map((model) => (
                                 <button
                                     key={model.id}
-                                    onClick={() => setSelectedModel(model.id)}
+                                    onClick={() => { setSelectedModel(model.id); trackEvent('translate_model_selected', { model: model.id }); }}
                                     className={`relative rounded-xl p-4 text-left transition-all duration-200 border-2 ${selectedModel === model.id
                                             ? 'border-purple-400 bg-purple-50/50 shadow-sm'
                                             : 'border-gray-200 bg-white/80 hover:border-purple-200'
@@ -286,7 +290,12 @@ export default function TranslatePage() {
                     >
                         <button
                             disabled={!canSubmit}
-                            onClick={() => alert('Translation feature coming soon!')}
+                            onClick={() => {
+                                if (canSubmit) {
+                                    trackEvent('translate_submit', { model: selectedModel, targetLang, inputType: file ? 'file' : 'url' });
+                                }
+                                alert('Translation feature coming soon!');
+                            }}
                             className={`w-full py-3.5 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 ${canSubmit
                                     ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:shadow-lg hover:shadow-purple-200 hover:scale-[1.01]'
                                     : 'bg-gray-100 text-gray-400 cursor-not-allowed'

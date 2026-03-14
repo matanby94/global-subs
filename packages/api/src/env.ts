@@ -71,6 +71,11 @@ const envSchema = z.object({
     .string()
     .min(16, 'INTERNAL_API_TOKEN must be at least 16 characters')
     .optional(),
+
+  // Analytics Agent (all optional)
+  UMAMI_API_URL: z.string().url().optional(),
+  UMAMI_API_TOKEN: z.string().optional(),
+  ANALYTICS_LLM_MODEL: z.string().default('gpt-4o'),
 });
 
 function validateEnv() {

@@ -13,6 +13,8 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "demo": "pnpm --filter @stremio-ai-subs/api demo",
+    "analytics:daily": "pnpm --filter @stremio-ai-subs/api analytics:daily",
+    "analytics:weekly": "pnpm --filter @stremio-ai-subs/api analytics:weekly",
     "db:sync-to-prod": "bash scripts/sync-to-prod.sh",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "prepare": "husky install || true"

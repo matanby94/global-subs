@@ -113,18 +113,19 @@ export default function HomePage() {
                         <span className="text-xl font-bold gradient-text">GlobalSubs</span>
                     </div>
                     <div className="flex items-center gap-6 animate-fade-in-right">
-                        <Link href="#features" className="hidden sm:block text-gray-600 hover:text-purple-700 transition-colors text-sm font-medium">
+                        <Link href="#features" className="hidden sm:block text-gray-600 hover:text-purple-700 transition-colors text-sm font-medium" data-umami-event="landing_nav_features">
                             Features
                         </Link>
-                        <Link href="#demo" className="hidden sm:block text-gray-600 hover:text-purple-700 transition-colors text-sm font-medium">
+                        <Link href="#demo" className="hidden sm:block text-gray-600 hover:text-purple-700 transition-colors text-sm font-medium" data-umami-event="landing_nav_demo">
                             Demo
                         </Link>
-                        <Link href="#pricing" className="hidden sm:block text-gray-600 hover:text-purple-700 transition-colors text-sm font-medium">
+                        <Link href="#pricing" className="hidden sm:block text-gray-600 hover:text-purple-700 transition-colors text-sm font-medium" data-umami-event="landing_nav_pricing">
                             Pricing
                         </Link>
                         <Link
                             href="/app"
                             className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-5 py-2 rounded-xl text-sm font-semibold hover:shadow-lg hover:shadow-purple-200 hover:scale-105 transition-all duration-200"
+                            data-umami-event="landing_nav_signin"
                         >
                             Sign In
                         </Link>
@@ -159,6 +160,8 @@ export default function HomePage() {
                                     <Link
                                         href="/app"
                                         className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white px-8 py-4 rounded-2xl text-lg font-semibold hover:shadow-xl hover:shadow-purple-200 hover:scale-[1.03] transition-all duration-200"
+                                        data-umami-event="landing_hero_cta"
+                                        data-umami-event-label="get_started"
                                     >
                                         Get Started Free
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -168,6 +171,8 @@ export default function HomePage() {
                                     <Link
                                         href="#demo"
                                         className="inline-flex items-center justify-center gap-2 border-2 border-purple-200 text-purple-700 px-8 py-4 rounded-2xl text-lg font-semibold hover:bg-purple-50 transition-all duration-200"
+                                        data-umami-event="landing_hero_cta"
+                                        data-umami-event-label="see_demo"
                                     >
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
@@ -414,6 +419,8 @@ export default function HomePage() {
                                                 ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:shadow-lg hover:shadow-purple-200 hover:scale-[1.02]'
                                                 : 'border-2 border-purple-200 text-purple-700 hover:bg-purple-50'
                                                 }`}
+                                            data-umami-event="landing_pricing_plan_click"
+                                            data-umami-event-plan={plan.name.toLowerCase().replace(' ', '_')}
                                         >
                                             {plan.cta}
                                         </Link>
@@ -454,6 +461,7 @@ export default function HomePage() {
                                 <Link
                                     href="/app"
                                     className="inline-flex items-center justify-center gap-2 bg-white text-purple-700 px-8 py-4 rounded-2xl text-lg font-bold hover:shadow-2xl hover:scale-[1.03] transition-all duration-200"
+                                    data-umami-event="landing_bottom_cta"
                                 >
                                     Start Translating Free
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -464,6 +472,7 @@ export default function HomePage() {
                                     href={`stremio://${(() => { try { return new URL(process.env.NEXT_PUBLIC_ADDON_MANIFEST_URL || '').host; } catch { return '127.0.0.1:3012'; } })()}/manifest.json`}
                                     className="inline-flex items-center justify-center gap-2 border-2 border-white/30 text-white px-8 py-4 rounded-2xl text-lg font-semibold hover:bg-white/10 transition-all duration-200"
                                     aria-label="Install GlobalSubs Stremio Add-on"
+                                    data-umami-event="addon_landing_cta"
                                 >
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -494,13 +503,13 @@ export default function HomePage() {
                             </div>
                         </div>
                         <nav className="flex gap-6 text-sm" aria-label="Footer navigation">
-                            <Link href="/privacy" className="text-gray-400 hover:text-white transition-colors">
+                            <Link href="/privacy" className="text-gray-400 hover:text-white transition-colors" data-umami-event="landing_footer_link" data-umami-event-link="privacy">
                                 Privacy Policy
                             </Link>
-                            <Link href="/terms" className="text-gray-400 hover:text-white transition-colors">
+                            <Link href="/terms" className="text-gray-400 hover:text-white transition-colors" data-umami-event="landing_footer_link" data-umami-event-link="terms">
                                 Terms of Service
                             </Link>
-                            <Link href="/contact" className="text-gray-400 hover:text-white transition-colors">
+                            <Link href="/contact" className="text-gray-400 hover:text-white transition-colors" data-umami-event="landing_footer_link" data-umami-event-link="contact">
                                 Contact Us
                             </Link>
                         </nav>

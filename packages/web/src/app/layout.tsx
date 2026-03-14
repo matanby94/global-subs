@@ -64,6 +64,9 @@ const structuredData = {
   },
 };
 
+const umamiUrl = process.env.NEXT_PUBLIC_UMAMI_URL;
+const umamiWebsiteId = process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID;
+
 export default function RootLayout({
   children,
 }: {
@@ -76,6 +79,13 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
+        {umamiUrl && umamiWebsiteId && (
+          <script
+            defer
+            src={`${umamiUrl}/script.js`}
+            data-website-id={umamiWebsiteId}
+          />
+        )}
       </head>
       <body className={inter.className}>
         <Providers>{children}</Providers>

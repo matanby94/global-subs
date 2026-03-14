@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 import { useAuth } from '../../providers/auth-provider';
+import { trackEvent } from '../../../lib/analytics';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3011';
 
@@ -99,11 +100,18 @@ export default function LibraryPage() {
             headers: { Authorization: `Bearer ${accessToken}` },
         })
             .then((res) => {
-                setItems(res.data.library || []);
+                const library = res.data.library || [];
+                setItems(library);
+                if (library.length === 0) {
+                    trackEvent('library_empty');
+                } else {
+                    trackEvent('library_loaded', { itemCount: library.length });
+                }
             })
             .catch((err) => {
                 console.error('Failed to fetch library:', err);
                 setError('Failed to load your library');
+                trackEvent('library_error');
             })
             .finally(() => setFetching(false));
     }, [accessToken]);
@@ -118,6 +126,7 @@ export default function LibraryPage() {
         if (!accessToken || !item.library_key) return;
         const key = item.library_key;
         setRetrying((prev) => new Set(prev).add(key));
+        trackEvent('library_retry_click', { retryCount: item.retry_count ?? 0 });
         try {
             const res = await axios.post(
                 `${API_URL}/api/translations/library/retry`,
@@ -125,6 +134,7 @@ export default function LibraryPage() {
                 { headers: { Authorization: `Bearer ${accessToken}` } }
             );
             // Update the item in-place
+            trackEvent('library_retry_success');
             setItems((prev) =>
                 prev.map((it) =>
                     it.library_key === key
@@ -143,6 +153,7 @@ export default function LibraryPage() {
                     ? err.response.data.error
                     : 'Retry failed';
             setError(msg);
+            trackEvent('library_retry_error');
             setTimeout(() => setError(null), 4000);
         } finally {
             setRetrying((prev) => {
@@ -284,6 +295,7 @@ export default function LibraryPage() {
                                             href={`${API_URL}/api/sign/artifact/${item.artifact_hash}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
+                                            onClick={() => trackEvent('library_download_click', { artifactHash: item.artifact_hash || '', dstLang: item.dst_lang, model: item.model || '' })}
                                             className="flex-shrink-0 p-2 text-purple-500 hover:bg-purple-50 rounded-lg transition-colors"
                                             title="Download subtitle"
                                         >

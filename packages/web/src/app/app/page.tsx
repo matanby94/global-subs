@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
 import { useAuth } from '../providers/auth-provider';
+import { trackEvent } from '../../lib/analytics';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3011';
 const ADDON_MANIFEST_URL =
@@ -174,6 +175,7 @@ export default function AppPage() {
     setAuthError('');
     if (!response.credential) {
       setAuthError('Google sign-in failed: no credential returned');
+      trackEvent('auth_google_error');
       return;
     }
     try {
@@ -181,6 +183,7 @@ export default function AppPage() {
     } catch (err: unknown) {
       const error = err as { response?: { data?: { error?: { message?: string } } } };
       setAuthError(error.response?.data?.error?.message || 'Sign-in failed. Please try again.');
+      trackEvent('error_auth_shown');
     }
   }
 
@@ -200,12 +203,24 @@ export default function AppPage() {
     fetchSubscription();
   }, [accessToken]);
 
+  // Track dashboard loaded (only fires when user is authenticated)
+  useEffect(() => {
+    if (user && !loading) {
+      trackEvent('dash_loaded', {
+        credits: Number(user.balance_credits || 0),
+        hasSubscription: subscription?.status === 'active',
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, loading]);
+
   // Handle checkout query params (returning from Stripe or PayPal)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const payment = params.get('payment');
 
     if (payment === 'success') {
+      trackEvent('dash_payment_success', { gateway: params.get('paypal_order_id') || params.get('token') ? 'paypal' : 'stripe' });
       // Check if returning from PayPal and need to capture
       const ppOrderId = params.get('paypal_order_id') || params.get('token');
       const ppSubId = params.get('paypal_subscription_id') || params.get('subscription_id');
@@ -233,6 +248,7 @@ export default function AppPage() {
         window.history.replaceState({}, '', '/app');
       }
     } else if (payment === 'canceled') {
+      trackEvent('dash_payment_canceled');
       window.history.replaceState({}, '', '/app');
     }
 
@@ -241,6 +257,7 @@ export default function AppPage() {
     if (checkout && accessToken) {
       setShowBuyModal(true);
       setSelectedPlan(checkout);
+      trackEvent('dash_buy_credits_open', { context: 'query_param' });
       window.history.replaceState({}, '', '/app');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -248,6 +265,7 @@ export default function AppPage() {
 
   async function handlePurchase(planId: string, paymentMethod: 'stripe' | 'paypal' = 'stripe') {
     if (!accessToken || purchaseLoading) return;
+    trackEvent(paymentMethod === 'stripe' ? 'dash_checkout_stripe' : 'dash_checkout_paypal', { plan: planId });
     setPurchaseLoading(`${planId}_${paymentMethod}`);
     try {
       let res;
@@ -267,6 +285,7 @@ export default function AppPage() {
 
       // Provider returned a checkout/approval URL — redirect
       if (res.data?.checkoutUrl) {
+        trackEvent('dash_checkout_redirect', { plan: planId, gateway: paymentMethod });
         window.location.href = res.data.checkoutUrl;
         return;
       }
@@ -286,6 +305,7 @@ export default function AppPage() {
 
   async function handleCancelSubscription() {
     if (!accessToken) return;
+    trackEvent('dash_subscription_cancel');
     try {
       await axios.post(
         `${API_URL}/api/credits/cancel-subscription`,
@@ -302,6 +322,7 @@ export default function AppPage() {
   function handleCopyManifest() {
     navigator.clipboard.writeText(personalizedManifestUrl);
     setCopied(true);
+    trackEvent('dash_manifest_copy');
     setTimeout(() => setCopied(false), 2000);
   }
 
@@ -482,7 +503,7 @@ export default function AppPage() {
                 </div>
               )}
               <button
-                onClick={() => setShowBuyModal(true)}
+                onClick={() => { setShowBuyModal(true); trackEvent('dash_buy_credits_open', { context: 'card' }); }}
                 className="inline-flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all duration-200 backdrop-blur-sm"
               >
                 <PlusIcon className="w-4 h-4" />
@@ -492,7 +513,7 @@ export default function AppPage() {
           </div>
 
           {/* Quick translate card */}
-          <Link href="/app/translate" className="group">
+          <Link href="/app/translate" className="group" onClick={() => trackEvent('dash_nav_translate')}>
             <div className="h-full bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-100/80 shadow-sm hover:shadow-lg hover:border-purple-200 transition-all duration-300">
               <div className="flex items-center gap-2 mb-3">
                 <div className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white">
@@ -511,7 +532,7 @@ export default function AppPage() {
           </Link>
 
           {/* Library card */}
-          <Link href="/app/library" className="group">
+          <Link href="/app/library" className="group" onClick={() => trackEvent('dash_nav_library')}>
             <div className="h-full bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-100/80 shadow-sm hover:shadow-lg hover:border-purple-200 transition-all duration-300">
               <div className="flex items-center gap-2 mb-3">
                 <div className="p-2 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 text-white">
@@ -562,6 +583,7 @@ export default function AppPage() {
                     const next = e.target.value.toLowerCase();
                     setDstLang(next);
                     if (/^[a-z]{2}$/.test(next)) localStorage.setItem('preferredDstLang', next);
+                    trackEvent('dash_addon_lang_change', { lang: next });
                   }}
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                 >
@@ -576,6 +598,7 @@ export default function AppPage() {
               <div className="flex flex-col justify-end">
                 <a
                   href={personalizedStremioInstallUrl}
+                  onClick={() => trackEvent('dash_addon_install_click', { dstLang })}
                   className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:shadow-lg hover:shadow-purple-200 hover:scale-[1.02] transition-all duration-200"
                 >
                   <StremioIcon className="w-4 h-4" />
@@ -663,7 +686,7 @@ export default function AppPage() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-              onClick={() => { setShowBuyModal(false); setSelectedPlan(null); }}
+              onClick={() => { setShowBuyModal(false); trackEvent('modal_purchase_closed', { selectedPlan: selectedPlan || 'none' }); setSelectedPlan(null); }}
             >
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -682,7 +705,7 @@ export default function AppPage() {
                         : 'Get Credits'}
                   </h2>
                   <button
-                    onClick={() => { setShowBuyModal(false); setSelectedPlan(null); }}
+                    onClick={() => { setShowBuyModal(false); trackEvent('modal_purchase_closed', { selectedPlan: selectedPlan || 'none' }); setSelectedPlan(null); }}
                     className="text-gray-400 hover:text-gray-600 transition-colors"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -773,7 +796,7 @@ export default function AppPage() {
                   <div className="space-y-3">
                     {/* 50 Pack */}
                     <button
-                      onClick={() => setSelectedPlan('pack50')}
+                      onClick={() => { setSelectedPlan('pack50'); trackEvent('dash_plan_selected', { plan: 'pack50' }); }}
                       disabled={!!purchaseLoading}
                       className="w-full flex items-center justify-between bg-gray-50 hover:bg-purple-50 border border-gray-200 hover:border-purple-200 rounded-xl p-4 transition-all duration-200 disabled:opacity-50"
                     >
@@ -789,7 +812,7 @@ export default function AppPage() {
 
                     {/* 100 Pack */}
                     <button
-                      onClick={() => setSelectedPlan('pack100')}
+                      onClick={() => { setSelectedPlan('pack100'); trackEvent('dash_plan_selected', { plan: 'pack100' }); }}
                       disabled={!!purchaseLoading}
                       className="w-full flex items-center justify-between bg-purple-50 hover:bg-purple-100/60 border-2 border-purple-200 rounded-xl p-4 transition-all duration-200 relative disabled:opacity-50"
                     >
@@ -806,7 +829,7 @@ export default function AppPage() {
 
                     {/* Unlimited */}
                     <button
-                      onClick={() => setSelectedPlan('unlimited')}
+                      onClick={() => { setSelectedPlan('unlimited'); trackEvent('dash_plan_selected', { plan: 'unlimited' }); }}
                       disabled={!!purchaseLoading}
                       className="w-full flex items-center justify-between bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 border border-amber-200 rounded-xl p-4 transition-all duration-200 disabled:opacity-50"
                     >

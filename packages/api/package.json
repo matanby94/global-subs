@@ -8,7 +8,9 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "demo": "tsx src/scripts/seed-demo.ts"
+    "demo": "tsx src/scripts/seed-demo.ts",
+    "analytics:daily": "tsx src/scripts/user-analytics-agent.ts --mode=daily",
+    "analytics:weekly": "tsx src/scripts/user-analytics-agent.ts --mode=weekly"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.478.0",

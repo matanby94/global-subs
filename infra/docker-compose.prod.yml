@@ -20,6 +20,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../infra/migrations:/docker-entrypoint-initdb.d:ro
+      - ../infra/init-umami-db.sh:/docker-entrypoint-initdb.d/20-create-umami-db.sh:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-stremio}']
       interval: 10s
@@ -91,6 +92,10 @@ services:
       PAYPAL_PLAN_UNLIMITED: ${PAYPAL_PLAN_UNLIMITED:-}
       PAYPAL_MODE: ${PAYPAL_MODE:-live}
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-}
+      # Analytics
+      UMAMI_API_URL: ${UMAMI_API_URL:-}
+      UMAMI_API_TOKEN: ${UMAMI_API_TOKEN:-}
+      ANALYTICS_LLM_MODEL: ${ANALYTICS_LLM_MODEL:-gpt-4o}
       # Subtitle provider keys for inline fetch (Stage 6 ensure-addon)
       SUBDL_API_KEY: ${SUBDL_API_KEY:-}
       OPENSUBTITLES_API_KEY: ${OPENSUBTITLES_API_KEY:-}
@@ -215,6 +220,8 @@ services:
         NEXT_PUBLIC_ADDON_URL: ${NEXT_PUBLIC_ADDON_URL:-https://addon.globalsubs-ai.com}
         NEXT_PUBLIC_ADDON_MANIFEST_URL: ${NEXT_PUBLIC_ADDON_MANIFEST_URL:-https://addon.globalsubs-ai.com/manifest.json}
         NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID:-}
+        NEXT_PUBLIC_UMAMI_URL: ${NEXT_PUBLIC_UMAMI_URL:-}
+        NEXT_PUBLIC_UMAMI_WEBSITE_ID: ${NEXT_PUBLIC_UMAMI_WEBSITE_ID:-}
     container_name: globalsubs-web
     restart: unless-stopped
     depends_on:
@@ -225,6 +232,31 @@ services:
       NODE_ENV: production
     networks:
       - internal
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  umami:
+    image: ghcr.io/umami-software/umami:postgresql-latest
+    container_name: globalsubs-umami
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '${UMAMI_PORT:-3005}:3000'
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-stremio}:${POSTGRES_PASSWORD}@postgres:5432/umami
+      DISABLE_TELEMETRY: '1'
+    networks:
+      - internal
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3000/api/heartbeat || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
     logging:
       driver: json-file
       options:

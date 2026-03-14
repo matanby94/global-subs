@@ -1,13 +1,21 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { trackEvent } from '../../lib/analytics';
 
 export default function ContactPage() {
     const [submitted, setSubmitted] = useState(false);
 
+    useEffect(() => {
+        if (submitted) trackEvent('contact_success_shown');
+    }, [submitted]);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        const form = e.target as HTMLFormElement;
+        const subject = (form.querySelector('select') as HTMLSelectElement)?.value || '';
+        trackEvent('contact_form_submit', { subject });
         setSubmitted(true);
     };
 
@@ -39,7 +47,7 @@ export default function ContactPage() {
                                     We&apos;ll get back to you as soon as possible.
                                 </p>
                                 <button
-                                    onClick={() => setSubmitted(false)}
+                                    onClick={() => { setSubmitted(false); trackEvent('contact_send_another'); }}
                                     className="text-primary hover:underline"
                                 >
                                     Send Another Message
@@ -120,7 +128,7 @@ export default function ContactPage() {
                                     <div className="text-2xl">📧</div>
                                     <div>
                                         <h3 className="font-semibold text-gray-900">Email</h3>
-                                        <a href="mailto:support@globalsubs-ai.com" className="text-primary hover:underline">
+                                        <a href="mailto:support@globalsubs-ai.com" onClick={() => trackEvent('contact_email_click')} className="text-primary hover:underline">
                                             support@globalsubs-ai.com
                                         </a>
                                     </div>

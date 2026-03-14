@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import axios from 'axios';
+import { trackEvent } from '../../lib/analytics';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3011';
 
@@ -40,11 +41,13 @@ async function refreshTokens(): Promise<{ accessToken: string; refreshToken: str
         const { accessToken, refreshToken: newRefresh } = res.data;
         localStorage.setItem('token', accessToken);
         localStorage.setItem('refreshToken', newRefresh);
+        trackEvent('auth_token_refreshed');
         return { accessToken, refreshToken: newRefresh };
     } catch {
         // Refresh failed - clear tokens
         localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
+        trackEvent('auth_session_expired');
         return null;
     }
 }
@@ -89,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         const storedToken = localStorage.getItem('token');
         if (storedToken) {
+            trackEvent('auth_session_restored');
             loadUser(storedToken).finally(() => setLoading(false));
         } else {
             setLoading(false);
@@ -96,27 +100,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [loadUser]);
 
     const handleOAuthResponse = useCallback(
-        async (data: { user: User; accessToken: string; refreshToken: string }) => {
+        async (data: { user: User; accessToken: string; refreshToken: string; isNew?: boolean }, provider: string) => {
             localStorage.setItem('token', data.accessToken);
             localStorage.setItem('refreshToken', data.refreshToken);
             setAccessToken(data.accessToken);
             setUser(data.user);
+            trackEvent('auth_google_success', { provider, isNew: data.isNew ? 1 : 0 });
         },
         []
     );
 
     const signInWithGoogle = useCallback(
         async (idToken: string) => {
+            trackEvent('auth_google_start');
             const res = await axios.post(`${API_URL}/api/auth/google`, { idToken });
-            await handleOAuthResponse(res.data);
+            await handleOAuthResponse(res.data, 'google');
         },
         [handleOAuthResponse]
     );
 
     const signInWithApple = useCallback(
         async (idToken: string) => {
+            trackEvent('auth_google_start');
             const res = await axios.post(`${API_URL}/api/auth/apple`, { idToken });
-            await handleOAuthResponse(res.data);
+            await handleOAuthResponse(res.data, 'apple');
         },
         [handleOAuthResponse]
     );
@@ -126,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem('refreshToken');
         setUser(null);
         setAccessToken(null);
+        trackEvent('auth_signout');
     }, []);
 
     const refreshUser = useCallback(async () => {

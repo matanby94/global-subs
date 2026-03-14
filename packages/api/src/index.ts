@@ -17,6 +17,7 @@ import { internalAddonRoutes } from './routes/internal-addon';
 import { internalQueuesRoutes } from './routes/internal-queues';
 import { internalMonitoringRoutes } from './routes/internal-monitoring';
 import { internalDashboardRoutes } from './routes/internal-dashboard';
+import { analyticsRoutes } from './routes/analytics';
 import { webhookRoutes } from './routes/webhooks';
 import { paypalWebhookRoutes } from './routes/paypal-webhooks';
 import { db } from './db';
@@ -285,6 +286,7 @@ async function buildServer() {
   await fastify.register(internalQueuesRoutes, { prefix: '/api/internal/queues' });
   await fastify.register(internalMonitoringRoutes, { prefix: '/api/internal/monitoring' });
   await fastify.register(internalDashboardRoutes, { prefix: '/api/internal/dashboard' });
+  await fastify.register(analyticsRoutes);
   await fastify.register(webhookRoutes, { prefix: '/api/webhooks/stripe' });
   await fastify.register(paypalWebhookRoutes, { prefix: '/api/webhooks/paypal' });
 
