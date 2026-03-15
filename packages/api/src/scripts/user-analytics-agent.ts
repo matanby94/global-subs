@@ -5,14 +5,37 @@
  * feeds them to GPT-4o via `gh models run` (or OpenAI fallback), and stores
  * structured reports in the analytics_reports table.
  *
- * Usage:
+ * Usage (in production via API package):
  *   tsx src/scripts/user-analytics-agent.ts --mode=daily
  *   tsx src/scripts/user-analytics-agent.ts --mode=weekly
+ *
+ * Usage (locally against production, via wrapper script):
+ *   bash scripts/analytics-prod.sh --mode=daily
  */
 
-import '../env';
-import { db } from '../db';
+import dotenv from 'dotenv';
+import path from 'node:path';
+import fs from 'node:fs';
+import { Pool } from 'pg';
 import { execSync } from 'node:child_process';
+
+// Load env: prefer .env.production (local-to-prod), fall back to .env (server)
+const repoRoot = path.resolve(__dirname, '../../../..');
+for (const name of ['.env.production', '.env']) {
+  const candidate = path.join(repoRoot, name);
+  if (fs.existsSync(candidate)) {
+    dotenv.config({ path: candidate });
+    break;
+  }
+}
+
+// Standalone DB pool — doesn't depend on the full API env validation
+const db = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgresql://stremio:stremio_dev@localhost:5432/stremio_ai_subs',
+  max: 5,
+  idleTimeoutMillis: 10_000,
+  connectionTimeoutMillis: 5_000,
+});
 
 /* ─── Config ─── */
 const MODE = process.argv.includes('--mode=weekly') ? 'weekly' : 'daily';
@@ -581,8 +604,9 @@ async function main() {
 }
 
 main()
-  .then(() => process.exit(0))
+  .then(() => { db.end(); process.exit(0); })
   .catch((err) => {
     console.error('❌ Analytics agent failed:', err);
+    db.end();
     process.exit(1);
   });

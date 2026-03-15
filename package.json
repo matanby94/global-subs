@@ -15,6 +15,8 @@
     "demo": "pnpm --filter @stremio-ai-subs/api demo",
     "analytics:daily": "pnpm --filter @stremio-ai-subs/api analytics:daily",
     "analytics:weekly": "pnpm --filter @stremio-ai-subs/api analytics:weekly",
+    "analytics:prod:daily": "bash scripts/analytics-prod.sh --mode=daily",
+    "analytics:prod:weekly": "bash scripts/analytics-prod.sh --mode=weekly",
     "db:sync-to-prod": "bash scripts/sync-to-prod.sh",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "prepare": "husky install || true"
