@@ -19,9 +19,9 @@ import fs from 'node:fs';
 import { Pool } from 'pg';
 import { execSync } from 'node:child_process';
 
-// Load env: prefer .env.production (local-to-prod), fall back to .env (server)
+// Load env: prefer .env.analytics (local-to-prod), then .env.production, fall back to .env (server)
 const repoRoot = path.resolve(__dirname, '../../../..');
-for (const name of ['.env.production', '.env']) {
+for (const name of ['.env.analytics', '.env.production', '.env']) {
   const candidate = path.join(repoRoot, name);
   if (fs.existsSync(candidate)) {
     dotenv.config({ path: candidate });
@@ -306,7 +306,7 @@ async function collectRevenueMetrics() {
         COUNT(*) FILTER (WHERE status = 'active')::int AS active,
         COUNT(*) FILTER (WHERE status = 'canceled')::int AS canceled,
         AVG(EXTRACT(EPOCH FROM (
-          COALESCE(canceled_at, NOW()) - created_at
+          CASE WHEN status = 'canceled' THEN updated_at ELSE NOW() END - created_at
         )) / 86400)::numeric(10,1) AS avg_duration_days
       FROM subscriptions
     `),
@@ -330,9 +330,9 @@ async function collectAddonMetrics() {
     `),
     db.query(`
       SELECT
-        COUNT(*) FILTER (WHERE status = 'served' OR artifact_hash IS NOT NULL)::int AS served,
-        COUNT(*) FILTER (WHERE status = 'pending' OR artifact_hash IS NULL)::int AS pending,
-        COUNT(*)::int AS total
+        COUNT(*)::int AS total,
+        COUNT(DISTINCT user_id)::int AS unique_users,
+        COUNT(DISTINCT artifact_hash)::int AS unique_artifacts
       FROM serve_events
     `),
     db.query(`
@@ -349,7 +349,7 @@ async function collectAddonMetrics() {
 
   return {
     avgHoursToInstall: installTimeline.rows[0],
-    serveStats: serveSuccess.rows[0],
+    serveEventStats: serveSuccess.rows[0],
     installedButNoServes: noServes.rows[0].count,
     topAddonLanguages: topLangs.rows,
   };
