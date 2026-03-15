@@ -9,7 +9,7 @@
 # Prerequisites:
 #   - SSH access to the production server (root@178.104.8.231)
 #   - .env.production file at repo root (see template below)
-#   - `gh` CLI authenticated (for gh models run) OR OPENAI_API_KEY
+#   - `gh` CLI with `gh-models` extension (for Copilot Pro+) OR OPENAI_API_KEY
 #   - pnpm + tsx installed
 #
 # Usage:

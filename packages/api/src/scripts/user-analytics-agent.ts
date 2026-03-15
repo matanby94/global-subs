@@ -16,6 +16,7 @@
 import dotenv from 'dotenv';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { Pool } from 'pg';
 import { execSync } from 'node:child_process';
 
@@ -31,7 +32,8 @@ for (const name of ['.env.analytics', '.env.production', '.env']) {
 
 // Standalone DB pool — doesn't depend on the full API env validation
 const db = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://stremio:stremio_dev@localhost:5432/stremio_ai_subs',
+  connectionString:
+    process.env.DATABASE_URL || 'postgresql://stremio:stremio_dev@localhost:5432/stremio_ai_subs',
   max: 5,
   idleTimeoutMillis: 10_000,
   connectionTimeoutMillis: 5_000,
@@ -402,13 +404,11 @@ async function collectUmamiData(): Promise<UmamiData | null> {
    Phase 3: LLM Analysis
    ═══════════════════════════════════════════════════════ */
 
-function buildPrompt(
-  metrics: Metrics,
-  umami: UmamiData | null,
-): string {
-  const modeInstruction = MODE === 'weekly'
-    ? 'This is a WEEKLY deep-dive report. Provide full trend analysis, cohort comparisons, and strategic recommendations across all 5 pillars.'
-    : 'This is a DAILY quick summary. Focus on anomalies, urgent churn risks, and quick wins. Keep it concise.';
+function buildPrompt(metrics: Metrics, umami: UmamiData | null): string {
+  const modeInstruction =
+    MODE === 'weekly'
+      ? 'This is a WEEKLY deep-dive report. Provide full trend analysis, cohort comparisons, and strategic recommendations across all 5 pillars.'
+      : 'This is a DAILY quick summary. Focus on anomalies, urgent churn risks, and quick wins. Keep it concise.';
 
   const umamiSection = umami
     ? `
@@ -471,19 +471,35 @@ Respond with valid JSON only, no markdown fences:
 }`;
 }
 
-async function analyzeWithLLM(prompt: string): Promise<{ analysis: AnalysisResult | null; rawResponse: string }> {
-  // Try 1: gh models run (uses Copilot Pro+ subscription)
+async function analyzeWithLLM(
+  prompt: string
+): Promise<{ analysis: AnalysisResult | null; rawResponse: string }> {
+  // Try 1: gh models run (uses Copilot Pro+ subscription — no API key cost)
   try {
-    const stdout = execSync(
-      `gh models run ${LLM_MODEL} --body-only`,
-      { input: prompt, maxBuffer: 10 * 1024 * 1024, timeout: 120_000, encoding: 'utf-8' },
-    );
-    const rawResponse = stdout.trim();
-    // Strip markdown code fences if present
-    const cleaned = rawResponse.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
-    const analysis = JSON.parse(cleaned) as AnalysisResult;
-    console.log('✅ Analysis completed via gh models run');
-    return { analysis, rawResponse };
+    const ghModel = LLM_MODEL.includes('/') ? LLM_MODEL : `openai/${LLM_MODEL}`;
+    // Write prompt to temp file to avoid shell argument length limits
+    const tmpFile = path.join(os.tmpdir(), `analytics-prompt-${Date.now()}.txt`);
+    fs.writeFileSync(tmpFile, prompt, 'utf-8');
+    try {
+      const stdout = execSync(
+        `cat "${tmpFile}" | gh models run ${ghModel} --system-prompt "You are a SaaS growth analyst. Respond with valid JSON only." --temperature 0.3 --max-tokens 4096`,
+        {
+          maxBuffer: 10 * 1024 * 1024,
+          timeout: 120_000,
+          encoding: 'utf-8',
+        }
+      );
+      const rawResponse = stdout.trim();
+      const cleaned = rawResponse
+        .replace(/^```(?:json)?\n?/m, '')
+        .replace(/\n?```$/m, '')
+        .trim();
+      const analysis = JSON.parse(cleaned) as AnalysisResult;
+      console.log('✅ Analysis completed via gh models run (Copilot Pro+)');
+      return { analysis, rawResponse };
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`⚠️  gh models run failed: ${message}`);
@@ -501,7 +517,10 @@ async function analyzeWithLLM(prompt: string): Promise<{ analysis: AnalysisResul
         body: JSON.stringify({
           model: LLM_MODEL.startsWith('gpt') ? LLM_MODEL : 'gpt-4o',
           messages: [
-            { role: 'system', content: 'You are a SaaS growth analyst. Respond with valid JSON only.' },
+            {
+              role: 'system',
+              content: 'You are a SaaS growth analyst. Respond with valid JSON only.',
+            },
             { role: 'user', content: prompt },
           ],
           temperature: 0.3,
@@ -511,7 +530,10 @@ async function analyzeWithLLM(prompt: string): Promise<{ analysis: AnalysisResul
       if (!res.ok) throw new Error(`OpenAI API ${res.status}: ${await res.text()}`);
       const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
       const rawResponse = data.choices?.[0]?.message?.content?.trim() || '';
-      const cleaned = rawResponse.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
+      const cleaned = rawResponse
+        .replace(/^```(?:json)?\n?/m, '')
+        .replace(/\n?```$/m, '')
+        .trim();
       const analysis = JSON.parse(cleaned) as AnalysisResult;
       console.log('✅ Analysis completed via OpenAI API');
       return { analysis, rawResponse };
@@ -534,7 +556,7 @@ async function storeReport(
   metrics: Metrics,
   analysis: AnalysisResult | null,
   rawPrompt: string,
-  rawResponse: string,
+  rawResponse: string
 ): Promise<void> {
   const reportDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const summary = analysis?.summary || `Metrics-only report (no LLM analysis). Mode: ${MODE}`;
@@ -555,7 +577,15 @@ async function storeReport(
        raw_prompt = EXCLUDED.raw_prompt,
        raw_response = EXCLUDED.raw_response,
        created_at = NOW()`,
-    [MODE, reportDate, summary, JSON.stringify(metricsJson), JSON.stringify(userInsights), rawPrompt, rawResponse],
+    [
+      MODE,
+      reportDate,
+      summary,
+      JSON.stringify(metricsJson),
+      JSON.stringify(userInsights),
+      rawPrompt,
+      rawResponse,
+    ]
   );
 
   console.log(`✅ Report stored: type=${MODE}, date=${reportDate}`);
@@ -604,7 +634,10 @@ async function main() {
 }
 
 main()
-  .then(() => { db.end(); process.exit(0); })
+  .then(() => {
+    db.end();
+    process.exit(0);
+  })
   .catch((err) => {
     console.error('❌ Analytics agent failed:', err);
     db.end();
