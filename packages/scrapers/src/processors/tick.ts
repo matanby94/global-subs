@@ -82,6 +82,24 @@ export async function tickProcessor(job: Job, deps: { scrapeQueue: Queue }) {
     await seedFromTranslationRequests(job);
   }
 
+  // ── Recover stuck "processing" rows (orphaned by crashed jobs / lost Redis) ──
+  const stuckThresholdMin = Math.max(
+    5,
+    parseInt(process.env.SCRAPERS_STUCK_THRESHOLD_MIN || '30', 10)
+  );
+  const recovered = await db.query(
+    `UPDATE scrape_requests
+     SET status = 'pending', last_error = 'recovered from stuck processing', updated_at = NOW()
+     WHERE status = 'processing'
+       AND updated_at < NOW() - ($1 || ' minutes')::interval`,
+    [stuckThresholdMin]
+  );
+  if (recovered.rowCount && recovered.rowCount > 0) {
+    job.log(
+      `tick: recovered ${recovered.rowCount} stuck processing rows (threshold ${stuckThresholdMin}min)`
+    );
+  }
+
   // ── Negative cache TTL: re-open stale "not_found" rows for re-scraping ──
   const negativeCacheTtlDays = Math.max(
     1,

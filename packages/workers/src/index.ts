@@ -147,6 +147,20 @@ sourceFetchWorker.on('completed', (job) => {
 
 sourceFetchWorker.on('failed', (job, err) => {
   logger.error({ jobId: job?.id, error: err.message }, 'Source-fetch job failed');
+
+  // Mark scrape_requests as failed so the row doesn't stay stuck in 'processing'
+  const srcRegistry = job?.data?.srcRegistry;
+  const srcId = job?.data?.srcId;
+  const dstLang = job?.data?.dstLang;
+  if (srcRegistry && srcId && dstLang) {
+    db.query(
+      `UPDATE scrape_requests
+       SET status = 'failed', last_error = $1, updated_at = NOW()
+       WHERE src_registry = $2 AND src_id = $3 AND lang = $4
+         AND status = 'processing'`,
+      [err.message.slice(0, 500), srcRegistry, srcId, dstLang]
+    ).catch(() => undefined);
+  }
 });
 
 logger.info('🚀 Workers started successfully');

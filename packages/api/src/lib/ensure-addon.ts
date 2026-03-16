@@ -880,24 +880,9 @@ export async function ensureAddonSubtitle(
   //          the translateQueue for LLM translation.
   // ──────────────────────────────────────────────
 
-  // Create a scrape_requests row so Stage 5 detects the in-flight job on next poll
-  await fastify.db
-    .query(
-      `INSERT INTO scrape_requests (src_registry, src_id, lang, status, priority, checked_at)
-       VALUES ($1, $2, $3, 'processing', 5, NOW())
-       ON CONFLICT (src_registry, src_id, lang)
-       DO UPDATE SET
-         status = CASE
-           WHEN scrape_requests.status IN ('failed', 'not_found', 'pending') THEN 'processing'
-           ELSE scrape_requests.status
-         END,
-         updated_at = NOW()`,
-      [srcRegistry, srcId, dstLang]
-    )
-    .catch(() => undefined);
-
   const jobId = `sf_${srcRegistry}_${srcId.replace(/:/g, '_')}_${dstLang}_${model}`;
 
+  // Enqueue BullMQ job FIRST — if this fails we avoid orphaning a 'processing' row in DB
   await sourceFetchQueue.add(
     'source-fetch',
     {
@@ -915,6 +900,22 @@ export async function ensureAddonSubtitle(
       backoff: { type: 'exponential', delay: 15_000 },
     }
   );
+
+  // Job enqueued successfully — now mark DB row so Stage 5 detects the in-flight job
+  await fastify.db
+    .query(
+      `INSERT INTO scrape_requests (src_registry, src_id, lang, status, priority, checked_at)
+       VALUES ($1, $2, $3, 'processing', 5, NOW())
+       ON CONFLICT (src_registry, src_id, lang)
+       DO UPDATE SET
+         status = CASE
+           WHEN scrape_requests.status IN ('failed', 'not_found', 'pending') THEN 'processing'
+           ELSE scrape_requests.status
+         END,
+         updated_at = NOW()`,
+      [srcRegistry, srcId, dstLang]
+    )
+    .catch(() => undefined);
 
   trace('stage6:enqueued', `Source-fetch job enqueued: ${jobId}`, {
     srcId,

@@ -72,6 +72,8 @@ async function main() {
     {
       connection,
       concurrency: scrapersEnabled ? scrapeConcurrency : 0,
+      lockDuration: 300_000, // 5 min lock per job
+      stalledInterval: 60_000, // Check for stalled jobs every 60s
       // Global rate limiter: cap total scrape throughput across all worker instances.
       // Individual provider rate limits are enforced separately via Redis in each provider.
       limiter: {

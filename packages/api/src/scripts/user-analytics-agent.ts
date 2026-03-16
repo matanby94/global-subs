@@ -471,6 +471,27 @@ Respond with valid JSON only, no markdown fences:
 }`;
 }
 
+/** Extract and parse JSON from an LLM response that may contain surrounding text. */
+function extractJson(raw: string): unknown {
+  // Strip markdown fences
+  let text = raw
+    .replace(/^```(?:json)?\s*\n?/gm, '')
+    .replace(/\n?```\s*$/gm, '')
+    .trim();
+
+  // Isolate the outermost JSON object
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    text = text.slice(firstBrace, lastBrace + 1);
+  }
+
+  // Remove trailing commas before } or ] (common LLM mistake)
+  text = text.replace(/,\s*([}\]])/g, '$1');
+
+  return JSON.parse(text);
+}
+
 async function analyzeWithLLM(
   prompt: string
 ): Promise<{ analysis: AnalysisResult | null; rawResponse: string }> {
@@ -490,11 +511,7 @@ async function analyzeWithLLM(
         }
       );
       const rawResponse = stdout.trim();
-      const cleaned = rawResponse
-        .replace(/^```(?:json)?\n?/m, '')
-        .replace(/\n?```$/m, '')
-        .trim();
-      const analysis = JSON.parse(cleaned) as AnalysisResult;
+      const analysis = extractJson(rawResponse) as AnalysisResult;
       console.log('✅ Analysis completed via gh models run (Copilot Pro+)');
       return { analysis, rawResponse };
     } finally {
@@ -530,11 +547,7 @@ async function analyzeWithLLM(
       if (!res.ok) throw new Error(`OpenAI API ${res.status}: ${await res.text()}`);
       const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
       const rawResponse = data.choices?.[0]?.message?.content?.trim() || '';
-      const cleaned = rawResponse
-        .replace(/^```(?:json)?\n?/m, '')
-        .replace(/\n?```$/m, '')
-        .trim();
-      const analysis = JSON.parse(cleaned) as AnalysisResult;
+      const analysis = extractJson(rawResponse) as AnalysisResult;
       console.log('✅ Analysis completed via OpenAI API');
       return { analysis, rawResponse };
     } catch (err) {

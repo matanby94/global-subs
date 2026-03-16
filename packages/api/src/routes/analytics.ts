@@ -8,7 +8,13 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
     '/api/internal/analytics/reports',
     { preHandler: authenticateInternal },
     async (request, reply) => {
-      const { type, from, to, limit = '20', offset = '0' } = request.query as Record<string, string>;
+      const {
+        type,
+        from,
+        to,
+        limit = '20',
+        offset = '0',
+      } = request.query as Record<string, string>;
 
       const conditions: string[] = [];
       const params: (string | number)[] = [];
@@ -38,12 +44,12 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
          FROM analytics_reports ${where}
          ORDER BY report_date DESC, created_at DESC
          LIMIT $${idx++} OFFSET $${idx++}`,
-        params,
+        params
       );
 
       const countResult = await db.query(
         `SELECT COUNT(*)::int AS total FROM analytics_reports ${where}`,
-        params.slice(0, params.length - 2),
+        params.slice(0, params.length - 2)
       );
 
       reply.send({
@@ -52,7 +58,7 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
         limit: limitVal,
         offset: offsetVal,
       });
-    },
+    }
   );
 
   // Get single report with full details
@@ -67,17 +73,14 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: 'Invalid report ID' });
       }
 
-      const result = await db.query(
-        `SELECT * FROM analytics_reports WHERE id = $1`,
-        [id],
-      );
+      const result = await db.query(`SELECT * FROM analytics_reports WHERE id = $1`, [id]);
 
       if (result.rows.length === 0) {
         return reply.status(404).send({ error: 'Report not found' });
       }
 
       reply.send({ report: result.rows[0] });
-    },
+    }
   );
 
   // Get latest report by type
@@ -96,7 +99,7 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
          WHERE report_type = $1
          ORDER BY report_date DESC, created_at DESC
          LIMIT 1`,
-        [type],
+        [type]
       );
 
       if (result.rows.length === 0) {
@@ -104,6 +107,6 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
       }
 
       reply.send({ report: result.rows[0] });
-    },
+    }
   );
 }

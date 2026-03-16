@@ -129,10 +129,10 @@ export default function TranslatePage() {
                             onDragLeave={handleDragLeave}
                             onClick={() => fileInputRef.current?.click()}
                             className={`relative rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer transition-all duration-200 ${isDragging
-                                    ? 'border-purple-400 bg-purple-50'
-                                    : file
-                                        ? 'border-green-300 bg-green-50/50'
-                                        : 'border-gray-200 bg-white/80 hover:border-purple-300 hover:bg-purple-50/30'
+                                ? 'border-purple-400 bg-purple-50'
+                                : file
+                                    ? 'border-green-300 bg-green-50/50'
+                                    : 'border-gray-200 bg-white/80 hover:border-purple-300 hover:bg-purple-50/30'
                                 }`}
                         >
                             <input
@@ -258,8 +258,8 @@ export default function TranslatePage() {
                                     key={model.id}
                                     onClick={() => { setSelectedModel(model.id); trackEvent('translate_model_selected', { model: model.id }); }}
                                     className={`relative rounded-xl p-4 text-left transition-all duration-200 border-2 ${selectedModel === model.id
-                                            ? 'border-purple-400 bg-purple-50/50 shadow-sm'
-                                            : 'border-gray-200 bg-white/80 hover:border-purple-200'
+                                        ? 'border-purple-400 bg-purple-50/50 shadow-sm'
+                                        : 'border-gray-200 bg-white/80 hover:border-purple-200'
                                         }`}
                                 >
                                     {selectedModel === model.id && (
@@ -297,8 +297,8 @@ export default function TranslatePage() {
                                 alert('Translation feature coming soon!');
                             }}
                             className={`w-full py-3.5 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 ${canSubmit
-                                    ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:shadow-lg hover:shadow-purple-200 hover:scale-[1.01]'
-                                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:shadow-lg hover:shadow-purple-200 hover:scale-[1.01]'
+                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                                 }`}
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>

@@ -211,7 +211,7 @@ export default function AppPage() {
         hasSubscription: subscription?.status === 'active',
       });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, loading]);
 
   // Handle checkout query params (returning from Stripe or PayPal)
