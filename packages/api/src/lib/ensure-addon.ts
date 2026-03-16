@@ -834,7 +834,7 @@ export async function ensureAddonSubtitle(
   const inflight = await fastify.db.query(
     `SELECT status FROM scrape_requests
      WHERE src_registry = $1 AND src_id = $2 AND lang = $3
-       AND status IN ('pending', 'processing')
+       AND status = 'processing'
      LIMIT 1`,
     [srcRegistry, srcId, dstLang]
   );
